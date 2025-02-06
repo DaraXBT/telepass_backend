@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface AuthService {
     List<User> getUSer();
+//    User login(String email, String password);
 }
