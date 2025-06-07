@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
@@ -47,13 +48,14 @@ import com.google.zxing.common.HybridBinarizer;
 @Service
 public class TelegramServiceImpl extends TelegramLongPollingBot {
     private static final Logger logger = LoggerFactory.getLogger(TelegramServiceImpl.class);
-    public static final String botToken = "7604740715:AAGnrNxu0hnnJ8JdtEBin1R3S_yE6GiHGHI";
+    private final String botToken;
     public static final String botUsername = "telepasskhbot";
     private static final long ADMIN_CHAT_ID = 649084122;
     private boolean awaitingQrUpload = false;
 
-    public TelegramServiceImpl() {
+    public TelegramServiceImpl(@Value("${telegram.bot-token}") String botToken) {
         super(botToken);
+        this.botToken = botToken;
     }
 
     @Override
