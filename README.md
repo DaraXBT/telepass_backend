@@ -2,7 +2,9 @@
 
 ## Configuration
 
-The application reads the Telegram bot token from the `telegram.bot-token` property. This property is configured in `src/main/resources/application.yml` to use the `TELEGRAM_BOT_TOKEN` environment variable.
+The Telegram bot token is provided via the `telegram.bot-token` property.
+`src/main/resources/application.yml` maps this to the `TELEGRAM_BOT_TOKEN`
+environment variable.
 
 Example:
 
