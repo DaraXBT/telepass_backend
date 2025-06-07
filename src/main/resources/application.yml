@@ -52,7 +52,7 @@ file-upload:
   client-path: /files/**
   base-uri: http://localhost:8080
 myAdmin:
-  username: Admin
-  password: Telepass1@
-BaseUrl: http://localhost:8080/
-WebBaseUrl: http://localhost:3000/
+  username: ${ADMIN_USERNAME}
+  password: ${ADMIN_PASSWORD}
+BaseUrl: ${BASE_URL:http://localhost:8080/}
+WebBaseUrl: ${WEB_BASE_URL:http://localhost:3000/}
