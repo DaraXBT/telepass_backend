@@ -56,3 +56,5 @@ myAdmin:
   password: Telepass1@
 BaseUrl: http://localhost:8080/
 WebBaseUrl: http://localhost:3000/
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN}
