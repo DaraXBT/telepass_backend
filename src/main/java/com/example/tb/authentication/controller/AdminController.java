@@ -27,13 +27,13 @@ import com.example.tb.authentication.auth.InfoChangePassword;
 import com.example.tb.authentication.repository.admin.AdminRepository;
 import com.example.tb.authentication.service.admin.AdminService;
 import com.example.tb.authentication.service.otp.OtpService;
+import com.example.tb.model.response.ApiResponse;
 import com.example.tb.jwt.JwtResponse;
 import com.example.tb.jwt.JwtTokenUtils;
 import com.example.tb.model.entity.Admin;
 import com.example.tb.model.request.AdminRequest;
 import com.example.tb.model.request.OtpRequest;
 import com.example.tb.model.request.OtpRequestEmail;
-import com.example.tb.model.response.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -117,6 +117,25 @@ public class AdminController {
         return ApiResponse.builder()
                 .date(LocalDateTime.now())
                 .message("OTP via email sent successfully\"")
+                .build();
+    }
+
+    @PostMapping("/ga-secret")
+    public ApiResponse<?> generateGoogleSecret(@RequestParam String username) {
+        String secret = adminService.generateGoogleSecret(username);
+        return ApiResponse.builder()
+                .date(LocalDateTime.now())
+                .message("Google Authenticator secret generated")
+                .payload(secret)
+                .build();
+    }
+
+    @PostMapping("/ga-verify")
+    public ApiResponse<?> verifyGoogleCode(@RequestParam String username, @RequestParam int code) {
+        boolean valid = adminService.verifyGoogleCode(username, code);
+        return ApiResponse.builder()
+                .date(LocalDateTime.now())
+                .message(valid ? "Code verified" : "Invalid code")
                 .build();
     }
 

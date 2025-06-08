@@ -47,6 +47,9 @@ public class Admin implements UserDetails {
     @Column(length = 1000)
     private String profile;
 
+    @Column(name = "google_secret")
+    private String googleSecret;
+
     @Override
     public String getUsername() {
         return username;
