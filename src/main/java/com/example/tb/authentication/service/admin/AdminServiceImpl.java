@@ -4,6 +4,7 @@ import com.example.tb.authentication.auth.InfoChangePassword;
 import com.example.tb.authentication.repository.admin.AdminRepository;
 import com.example.tb.authentication.repository.token.TokenRepository;
 import com.example.tb.authentication.service.email.EmailService;
+import com.example.tb.authentication.service.google.GoogleAuthService;
 import com.example.tb.authentication.service.otp.OtpService;
 import com.example.tb.exception.InternalServerErrorException;
 import com.example.tb.exception.NotFoundExceptionClass;
@@ -30,18 +31,20 @@ public class AdminServiceImpl implements AdminService {
     private final TokenRepository tokenRepository;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final GoogleAuthService googleAuthService;
     @Value("${myAdmin.username}")
     private String adminUsername;
     @Value("${myAdmin.password}")
     private String adminPassword;
     @Value("${BaseUrl}")
     private String baseUrl;
-    public AdminServiceImpl(AdminRepository adminrepository, PasswordEncoder passwordEncoder, TokenRepository tokenRepository, OtpService otpService, EmailService emailService) {
+    public AdminServiceImpl(AdminRepository adminrepository, PasswordEncoder passwordEncoder, TokenRepository tokenRepository, OtpService otpService, EmailService emailService, GoogleAuthService googleAuthService) {
         this.adminrepository = adminrepository;
         this.passwordEncoder = passwordEncoder;
         this.tokenRepository = tokenRepository;
         this.otpService = otpService;
         this.emailService = emailService;
+        this.googleAuthService = googleAuthService;
     }
     @PostConstruct
     public void createAdmin() {
@@ -159,5 +162,26 @@ public class AdminServiceImpl implements AdminService {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public String generateGoogleSecret(String username) {
+        Admin admin = adminrepository.findByUsernameReturnAuth(username);
+        if (admin == null) {
+            throw new NotFoundExceptionClass("Admin not found with username: " + username);
+        }
+        String secret = googleAuthService.generateSecret();
+        admin.setGoogleSecret(secret);
+        adminrepository.save(admin);
+        return secret;
+    }
+
+    @Override
+    public boolean verifyGoogleCode(String username, int code) {
+        Admin admin = adminrepository.findByUsernameReturnAuth(username);
+        if (admin == null || admin.getGoogleSecret() == null) {
+            throw new NotFoundExceptionClass("Secret not found for user: " + username);
+        }
+        return googleAuthService.verifyCode(admin.getGoogleSecret(), code);
     }
 }

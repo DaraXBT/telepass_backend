@@ -18,4 +18,8 @@ public interface AdminService extends UserDetailsService {
     void sendEmail(String email, String name, String msg) throws MessagingException, UnsupportedEncodingException;
     boolean verifyEmailToken(String token);
 
+    String generateGoogleSecret(String username);
+
+    boolean verifyGoogleCode(String username, int code);
+
 }
