@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.security.GeneralSecurityException;
+import java.io.IOException;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +29,7 @@ import com.example.tb.authentication.auth.InfoChangePassword;
 import com.example.tb.authentication.repository.admin.AdminRepository;
 import com.example.tb.authentication.service.admin.AdminService;
 import com.example.tb.authentication.service.otp.OtpService;
+import com.example.tb.authentication.service.google.oauth.GoogleOAuthService;
 import com.example.tb.model.response.ApiResponse;
 import com.example.tb.jwt.JwtResponse;
 import com.example.tb.jwt.JwtTokenUtils;
@@ -34,6 +37,7 @@ import com.example.tb.model.entity.Admin;
 import com.example.tb.model.request.AdminRequest;
 import com.example.tb.model.request.OtpRequest;
 import com.example.tb.model.request.OtpRequestEmail;
+import com.example.tb.model.request.GoogleTokenRequest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -50,16 +54,19 @@ public class AdminController {
     private final JwtTokenUtils jwtTokenUtils;
     private final OtpService otpService;
     private final AdminRepository adminRepository;
+    private final GoogleOAuthService googleOAuthService;
     @Value("${WebBaseUrl}")
     private String webBaseUrl;
 
     public AdminController(AdminService adminService, AuthenticationManager authenticationManager,
-            JwtTokenUtils jwtTokenUtils, OtpService otpService, AdminRepository adminRepository) {
+            JwtTokenUtils jwtTokenUtils, OtpService otpService, AdminRepository adminRepository,
+            GoogleOAuthService googleOAuthService) {
         this.adminService = adminService;
         this.authenticationManager = authenticationManager;
         this.jwtTokenUtils = jwtTokenUtils;
         this.otpService = otpService;
         this.adminRepository = adminRepository;
+        this.googleOAuthService = googleOAuthService;
     }
 
     @PostMapping("/login")
@@ -75,6 +82,21 @@ public class AdminController {
         final UserDetails userDetails = adminService.loadUserByUsername(jwtRequest.getUsername());
         final String token = jwtTokenUtils.generateToken(userDetails);
         return ResponseEntity.ok(new JwtResponse(LocalDateTime.now(), jwtRequest.getUsername(), token));
+    }
+
+    @PostMapping("/google-login")
+    public ResponseEntity<?> googleLogin(@RequestBody GoogleTokenRequest tokenRequest) throws GeneralSecurityException, IOException {
+        String email = googleOAuthService.verifyToken(tokenRequest.getIdToken());
+        if (email == null) {
+            throw new IllegalArgumentException("Invalid Google token");
+        }
+        Admin admin = adminRepository.findUserByEmail(email);
+        if (admin == null) {
+            throw new IllegalArgumentException("User not found with given email");
+        }
+        final UserDetails userDetails = adminService.loadUserByUsername(admin.getUsername());
+        final String token = jwtTokenUtils.generateToken(userDetails);
+        return ResponseEntity.ok(new JwtResponse(LocalDateTime.now(), admin.getUsername(), token));
     }
 
     private void authenticate(String username, String password) throws Exception {
