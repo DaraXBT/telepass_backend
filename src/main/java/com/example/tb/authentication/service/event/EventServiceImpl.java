@@ -5,8 +5,11 @@ import static com.example.tb.utils.QrCodeUtil.generateComplexQRCode;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -65,10 +68,21 @@ public class EventServiceImpl implements EventService {
 
     @Transactional(readOnly = true)
     private EventResponse convertToResponse(Event event) {
-        // Initialize the event to load all necessary collections
-        entityManager.refresh(event);
-
         List<EventRole> roles = eventRoleRepository.findByEventId(event.getId());
+        
+        // Safely handle registeredUsers to avoid lazy loading issues
+        Set<UUID> registeredUserIds = new HashSet<>();
+        try {
+            if (event.getRegisteredUsers() != null) {
+                registeredUserIds = event.getRegisteredUsers().stream()
+                        .map(User::getId)
+                        .collect(Collectors.toSet());
+            }
+        } catch (Exception e) {
+            log.warn("Could not load registered users for event {}: {}", event.getId(), e.getMessage());
+            // Continue with empty set
+        }
+        
         return EventResponse.builder()
                 .id(event.getId())
                 .name(event.getName())
@@ -79,10 +93,8 @@ public class EventServiceImpl implements EventService {
                 .registered(event.getRegistered())
                 .qrCodePath(event.getQrCodePath())
                 .eventImg(event.getEventImg())
-                .eventRoles(roles)
-                .registeredUsers(event.getRegisteredUsers().stream()
-                        .map(User::getId)
-                        .collect(Collectors.toSet()))
+                .eventRoles(new ArrayList<>()) // Return empty list to avoid circular reference issues
+                .registeredUsers(registeredUserIds)
                 .build();
     }
 

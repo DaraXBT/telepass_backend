@@ -8,6 +8,7 @@ import com.example.tb.jwt.JwtAuthEntryPoint;
 import com.example.tb.jwt.JwtTokenFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -47,8 +48,7 @@ public class DataBaseSecurity {
     @Bean
     AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
-    }
-    @Bean
+    }    @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.cors();
         http.csrf()
@@ -60,6 +60,7 @@ public class DataBaseSecurity {
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger/ui.html").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/test", "/api/v1/events/debug", "/api/v1/events/simple").permitAll()
                         .requestMatchers(
                                 "/api/v1/events/**",
                                 "/api/v1/audiences/**"
