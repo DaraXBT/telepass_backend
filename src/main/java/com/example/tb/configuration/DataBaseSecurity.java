@@ -60,7 +60,7 @@ public class DataBaseSecurity {
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger/ui.html").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/test", "/api/v1/events/debug", "/api/v1/events/simple").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/test", "/api/v1/events/*").permitAll()
                         .requestMatchers(
                                 "/api/v1/events/**",
                                 "/api/v1/audiences/**"
