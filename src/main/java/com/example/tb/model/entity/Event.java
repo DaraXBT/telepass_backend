@@ -3,6 +3,8 @@ package com.example.tb.model.entity;
 import java.util.Set;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -36,11 +38,14 @@ public class Event {
     private int registered;
     private String qrCodePath;
     private String eventImg; // Path to event image
+    private UUID adminId; // Admin who created/owns this event
 
     @OneToMany(mappedBy = "event")
+    @JsonIgnore // Prevent circular reference during JSON serialization
     private Set<EventRole> eventRoles;
 
     @ManyToMany
     @JoinTable(name = "event_registrations", joinColumns = @JoinColumn(name = "event_id"), inverseJoinColumns = @JoinColumn(name = "user_id"))
+    @JsonIgnore // Prevent lazy loading issues during JSON serialization
     private Set<User> registeredUsers;
 }

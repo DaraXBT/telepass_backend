@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -67,7 +68,7 @@ public class EventServiceImpl implements EventService {
     }
 
     @Transactional(readOnly = true)
-    private EventResponse convertToResponse(Event event) {
+    protected EventResponse convertToResponse(Event event) {
         List<EventRole> roles = eventRoleRepository.findByEventId(event.getId());
         
         // Safely handle registeredUsers to avoid lazy loading issues
@@ -82,8 +83,7 @@ public class EventServiceImpl implements EventService {
             log.warn("Could not load registered users for event {}: {}", event.getId(), e.getMessage());
             // Continue with empty set
         }
-        
-        return EventResponse.builder()
+          return EventResponse.builder()
                 .id(event.getId())
                 .name(event.getName())
                 .description(event.getDescription())
@@ -93,6 +93,7 @@ public class EventServiceImpl implements EventService {
                 .registered(event.getRegistered())
                 .qrCodePath(event.getQrCodePath())
                 .eventImg(event.getEventImg())
+                .adminId(event.getAdminId())
                 .eventRoles(new ArrayList<>()) // Return empty list to avoid circular reference issues
                 .registeredUsers(registeredUserIds)
                 .build();
@@ -108,8 +109,7 @@ public class EventServiceImpl implements EventService {
             if (eventRequest.getName() == null || eventRequest.getName().trim().isEmpty()) {
                 throw new IllegalArgumentException("Event name is required");
             }
-            
-            log.debug("Creating event entity from request");
+              log.debug("Creating event entity from request");
             // Convert request to entity
             Event event = Event.builder()
                     .name(eventRequest.getName())
@@ -119,6 +119,7 @@ public class EventServiceImpl implements EventService {
                     .capacity(eventRequest.getCapacity())
                     .registered(eventRequest.getRegistered())
                     .eventImg(eventRequest.getEventImg())
+                    .adminId(eventRequest.getAdminId())
                     .build();
 
             // Save the event
@@ -185,29 +186,110 @@ public class EventServiceImpl implements EventService {
             log.error("Event creation failed: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to create event: " + e.getMessage(), e);
         }
+    }    @Override
+    @Transactional
+    public Event updateEvent(UUID id, EventRequest eventRequest) {
+        try {
+            log.info("Starting event update process for event ID: {}", id);
+            log.debug("Update request received: {}", eventRequest);
+            
+            // Validate input
+            if (id == null) {
+                throw new IllegalArgumentException("Event ID cannot be null");
+            }
+            if (eventRequest == null) {
+                throw new IllegalArgumentException("Event request cannot be null");
+            }
+            
+            log.debug("Looking for existing event with ID: {}", id);
+            Event existingEvent = eventRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Event not found with ID: " + id));
+            
+            log.info("Found existing event: '{}' (ID: {})", existingEvent.getName(), existingEvent.getId());
+            log.debug("Current event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}", 
+                    existingEvent.getName(), existingEvent.getAdminId(), existingEvent.getStatus(), 
+                    existingEvent.getCategory(), existingEvent.getCapacity());
+            
+            // Log what's being updated
+            log.debug("Updating event fields...");
+            if (!Objects.equals(existingEvent.getName(), eventRequest.getName())) {
+                log.debug("Name changing from '{}' to '{}'", existingEvent.getName(), eventRequest.getName());
+            }
+            if (!Objects.equals(existingEvent.getAdminId(), eventRequest.getAdminId())) {
+                log.debug("AdminId changing from '{}' to '{}'", existingEvent.getAdminId(), eventRequest.getAdminId());
+            }
+            if (!Objects.equals(existingEvent.getStatus(), eventRequest.getStatus())) {
+                log.debug("Status changing from '{}' to '{}'", existingEvent.getStatus(), eventRequest.getStatus());
+            }
+            if (!Objects.equals(existingEvent.getCategory(), eventRequest.getCategory())) {
+                log.debug("Category changing from '{}' to '{}'", existingEvent.getCategory(), eventRequest.getCategory());
+            }
+            if (existingEvent.getCapacity() != eventRequest.getCapacity()) {
+                log.debug("Capacity changing from {} to {}", existingEvent.getCapacity(), eventRequest.getCapacity());
+            }
+            if (existingEvent.getRegistered() != eventRequest.getRegistered()) {
+                log.debug("Registered count changing from {} to {}", existingEvent.getRegistered(), eventRequest.getRegistered());
+            }
+            
+            // Update event fields
+            existingEvent.setName(eventRequest.getName());
+            existingEvent.setDescription(eventRequest.getDescription());
+            existingEvent.setStatus(eventRequest.getStatus());
+            existingEvent.setCategory(eventRequest.getCategory());
+            existingEvent.setCapacity(eventRequest.getCapacity());
+            existingEvent.setRegistered(eventRequest.getRegistered());
+            existingEvent.setEventImg(eventRequest.getEventImg());
+            existingEvent.setAdminId(eventRequest.getAdminId());
+            
+            log.debug("All fields updated, saving to database...");
+            Event savedEvent = eventRepository.save(existingEvent);
+            
+            log.info("Successfully updated event with ID: {}", savedEvent.getId());
+            log.debug("Final event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}", 
+                    savedEvent.getName(), savedEvent.getAdminId(), savedEvent.getStatus(), 
+                    savedEvent.getCategory(), savedEvent.getCapacity());
+            
+            return savedEvent;
+            
+        } catch (RuntimeException e) {
+            log.error("Runtime exception during event update for ID {}: {}", id, e.getMessage(), e);
+            throw e;
+        } catch (Exception e) {
+            log.error("Unexpected exception during event update for ID {}: {}", id, e.getMessage(), e);            throw new RuntimeException("Failed to update event: " + e.getMessage(), e);
+        }
     }
 
     @Override
     @Transactional
-    public Event updateEvent(UUID id, EventRequest eventRequest) {
-        Event existingEvent = eventRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Event not found"));
-
-        // Update event fields
-        existingEvent.setName(eventRequest.getName());
-        existingEvent.setDescription(eventRequest.getDescription());
-        existingEvent.setStatus(eventRequest.getStatus());
-        existingEvent.setCategory(eventRequest.getCategory());
-        existingEvent.setCapacity(eventRequest.getCapacity());
-        existingEvent.setRegistered(eventRequest.getRegistered());
-        existingEvent.setEventImg(eventRequest.getEventImg());
-
-        return eventRepository.save(existingEvent);
+    public EventResponse updateEventAndReturnResponse(UUID id, EventRequest eventRequest) {
+        Event updatedEvent = updateEvent(id, eventRequest);
+        return convertToResponse(updatedEvent);
     }
 
     @Override
+    @Transactional
     public void deleteEvent(UUID id) {
-        eventRepository.deleteById(id);
+        log.info("Attempting to delete event with ID: {}", id);
+        
+        // Check if event exists
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Event not found with ID: " + id));
+        
+        log.info("Found event '{}' to delete", event.getName());
+        
+        try {
+            // Delete associated event roles first
+            eventRoleRepository.deleteByEventId(id);
+            log.debug("Deleted event roles for event ID: {}", id);
+            
+            // Delete the event
+            eventRepository.deleteById(id);
+            log.info("Successfully deleted event with ID: {}", id);
+            
+        } catch (Exception e) {
+            log.error("Failed to delete event with ID {}: {}", id, e.getMessage(), e);
+            throw new RuntimeException("Failed to delete event: " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -287,9 +369,23 @@ public class EventServiceImpl implements EventService {
     public List<EventRole> getEventRoles(UUID eventId) {
         // Check if the event exists
         if (!eventRepository.existsById(eventId)) {
-            throw new RuntimeException("Event not found");
-        }
+            throw new RuntimeException("Event not found");        }
 
         return eventRoleRepository.findByEventId(eventId);
+    }    @Override
+    @Transactional(readOnly = true)
+    public List<EventResponse> getEventsByAdminId(UUID adminId) {
+        log.info("Getting events for admin ID: {}", adminId);
+        
+        // Get all events directly by adminId
+        List<Event> events = eventRepository.findByAdminId(adminId);
+        
+        // Convert events to responses
+        List<EventResponse> eventResponses = events.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+                
+        log.info("Found {} events for admin ID: {}", eventResponses.size(), adminId);
+        return eventResponses;
     }
 }

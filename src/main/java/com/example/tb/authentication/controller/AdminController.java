@@ -5,6 +5,7 @@ import java.io.UnsupportedEncodingException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -301,6 +303,53 @@ public class AdminController {
             return ResponseEntity.ok(admin);
         }
         return ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/by-id")
+    @Operation(summary = "Get admin by ID")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<Admin> getAdminById(@RequestParam UUID id) {
+        log.info("Fetching admin with ID: {}", id);
+        Optional<Admin> adminOptional = adminRepository.findById(id);
+        if (adminOptional.isPresent()) {
+            Admin admin = adminOptional.get();
+            log.info("Found admin: {} with email: {}", admin.getUsername(), admin.getEmail());
+            return ResponseEntity.ok(admin);
+        } else {
+            log.warn("Admin not found with ID: {}", id);
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get admin by ID (RESTful)")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<Admin> getAdminByIdPath(@PathVariable UUID id) {
+        log.info("Fetching admin with ID: {}", id);
+        Optional<Admin> adminOptional = adminRepository.findById(id);
+        if (adminOptional.isPresent()) {
+            Admin admin = adminOptional.get();
+            log.info("Found admin: {} with email: {}", admin.getUsername(), admin.getEmail());
+            return ResponseEntity.ok(admin);
+        } else {
+            log.warn("Admin not found with ID: {}", id);
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/by-username")
+    @Operation(summary = "Get admin by username")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<Admin> getAdminByUsername(@RequestParam String username) {
+        log.info("Fetching admin with username: {}", username);
+        Admin admin = adminRepository.findByUsernameReturnAuth(username);
+        if (admin != null) {
+            log.info("Found admin: {} with email: {}", admin.getUsername(), admin.getEmail());
+            return ResponseEntity.ok(admin);
+        } else {
+            log.warn("Admin not found with username: {}", username);
+            return ResponseEntity.notFound().build();
+        }
     }
 
     // Password Reset Endpoints

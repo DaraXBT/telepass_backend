@@ -25,6 +25,7 @@ public class EventResponse {
     private int registered;
     private String qrCodePath;
     private String eventImg;
+    private UUID adminId; // Admin who created/owns this event
     private List<EventRole> eventRoles;
     private Set<UUID> registeredUsers;
 }

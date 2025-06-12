@@ -23,6 +23,7 @@ public class EventRequest {
     private int registered;
     private String qrCodePath;
     private String eventImg;
+    private UUID adminId; // Admin who creates/owns this event
     private List<EventRoleRequest> eventRoles;
     private Set<UUID> registeredUsers;
 }

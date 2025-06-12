@@ -19,6 +19,8 @@ public interface EventService {
     Event createEvent(EventRequest eventRequest);
 
     Event updateEvent(UUID id, EventRequest eventRequest);
+    
+    EventResponse updateEventAndReturnResponse(UUID id, EventRequest eventRequest);
 
     void deleteEvent(UUID id);
 
@@ -32,4 +34,7 @@ public interface EventService {
     void removeEventRole(UUID eventId, UUID userId);
 
     List<EventRole> getEventRoles(UUID eventId);
+    
+    // Get events by admin ID
+    List<EventResponse> getEventsByAdminId(UUID adminId);
 }
