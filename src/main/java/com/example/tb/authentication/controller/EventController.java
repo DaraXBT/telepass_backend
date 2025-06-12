@@ -25,11 +25,13 @@ import com.example.tb.model.request.EventRequest;
 import com.example.tb.model.response.EventResponse;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/api/v1/events")
 @CrossOrigin
 @SecurityRequirement(name = "bearerAuth")
+@Slf4j
 public class EventController {
     private final EventService eventService;
 
@@ -59,7 +61,18 @@ public class EventController {
 
     @PostMapping
     public Event createEvent(@RequestBody EventRequest eventRequest) {
-        return eventService.createEvent(eventRequest);
+        try {
+            log.info("Attempting to create event with name: {}", eventRequest.getName());
+            log.debug("Event request details: {}", eventRequest);
+            
+            Event createdEvent = eventService.createEvent(eventRequest);
+            
+            log.info("Successfully created event with ID: {}", createdEvent.getId());
+            return createdEvent;
+        } catch (Exception e) {
+            log.error("Failed to create event: {}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     @PutMapping("/{id}")
@@ -85,5 +98,12 @@ public class EventController {
     @GetMapping("/{eventId}/roles")
     public List<EventRole> getEventRoles(@PathVariable UUID eventId) {
         return eventService.getEventRoles(eventId);
+    }
+
+    // Test endpoint without authentication
+    @GetMapping("/test")
+    public ResponseEntity<String> testEndpoint() {
+        log.info("Test endpoint called successfully");
+        return ResponseEntity.ok("Event service is running on port 8080");
     }
 }

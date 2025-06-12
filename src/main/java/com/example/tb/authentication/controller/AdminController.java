@@ -36,6 +36,7 @@ import com.example.tb.model.request.AdminRequest;
 import com.example.tb.model.request.OtpRequest;
 import com.example.tb.model.request.OtpRequestEmail;
 import com.example.tb.model.response.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -46,6 +47,7 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/admin")
 @CrossOrigin
+@Slf4j
 public class AdminController {
     private final AdminService adminService;
     private final AuthenticationManager authenticationManager;
@@ -103,21 +105,26 @@ public class AdminController {
     }    @PostMapping("/register")
     public ApiResponse<?> register(@RequestBody AdminRequest adminRequest)
             throws MessagingException, UnsupportedEncodingException {
-          // Check if this is a Google account registration
+        
+        // Add debug logging to see what we're receiving
+        log.info("Received registration request - isGoogleAccount: {}, googleId: {}, email: {}", 
+                adminRequest.isGoogleAccount(), adminRequest.getGoogleId(), adminRequest.getEmail());
+        log.debug("Full AdminRequest: {}", adminRequest);
+        
+        // Check if this is a Google account registration
         if (adminRequest.isGoogleAccount() && adminRequest.getGoogleId() != null) {
-            System.out.println("Received Google admin registration request:");
-            System.out.println("Email: " + adminRequest.getEmail());
-            System.out.println("GoogleId: " + adminRequest.getGoogleId());
-            System.out.println("Username: " + adminRequest.getUsername());
-            System.out.println("FullName: " + adminRequest.getFullName());
+            log.info("Received Google admin registration request for email: {} with googleId: {}", 
+                    adminRequest.getEmail(), adminRequest.getGoogleId());
             
             try {
                 Admin registeredAdmin = adminService.registerGoogleAdmin(adminRequest);
-                System.out.println("Successfully registered admin with ID: " + registeredAdmin.getId());
+                log.info("Successfully registered/found admin with ID: {} and username: {}", 
+                        registeredAdmin.getId(), registeredAdmin.getUsername());
                 
                 // Generate JWT token for the new admin
                 final UserDetails userDetails = adminService.loadUserByUsername(registeredAdmin.getUsername());
                 final String token = jwtTokenUtils.generateToken(userDetails);
+                log.info("Generated JWT token successfully for registered admin: {}", registeredAdmin.getUsername());
                 
                 // Create response with admin data and token
                 Map<String, Object> responseData = new HashMap<>();
@@ -126,49 +133,55 @@ public class AdminController {
                 responseData.put("fullName", registeredAdmin.getFullName());
                 responseData.put("profileImage", registeredAdmin.getProfileImage());
                 responseData.put("googleId", registeredAdmin.getGoogleId());
-                responseData.put("isGoogleAccount", registeredAdmin.isGoogleAccount());
-                responseData.put("token", token);
+                responseData.put("isGoogleAccount", registeredAdmin.isGoogleAccount());                responseData.put("token", token);
                 responseData.put("accessToken", token);
                 
+                log.info("Returning success response for Google admin registration: {}", registeredAdmin.getUsername());
                 return ApiResponse.builder()
                         .payload(responseData)
                         .message("Google admin registered successfully")
                         .date(LocalDateTime.now())
                         .build();
             } catch (Exception e) {
+                log.error("Failed to register Google admin: {}", e.getMessage(), e);
                 return ApiResponse.builder()
-                        .message("Failed to register Google admin: " + e.getMessage())
+                        .message("google-auth-error")
                         .date(LocalDateTime.now())
                         .build();
             }
         } else {
+            log.info("Taking regular registration path - isGoogleAccount: {}, googleId: {}", 
+                    adminRequest.isGoogleAccount(), adminRequest.getGoogleId());
             // Regular admin registration
             adminService.saveUser(adminRequest);
             return ApiResponse.builder()
                     .date(LocalDateTime.now())
                     .message("Register successfully")
                     .build();        }
-    }
-
-    @PostMapping("/check-google-account")
+    }    @PostMapping("/check-google-account")
     @Operation(summary = "Check if admin exists with Google credentials")
     public ResponseEntity<ApiResponse<?>> checkGoogleAccount(@RequestBody Map<String, String> request) {
+        log.info("Received Google account check request: {}", request);
         String googleId = request.get("googleId");
         String email = request.get("email");
+        log.info("Extracted googleId: {}, email: {}", googleId, email);
         
         if ((googleId == null || googleId.isEmpty()) && (email == null || email.isEmpty())) {
+            log.warn("Missing required Google identification data");
             return ResponseEntity.badRequest().body(ApiResponse.builder()
                     .message("Missing required Google identification data")
                     .date(LocalDateTime.now())
                     .build());
-        }
-        
+        }        
         try {
+            log.info("Looking for admin with googleId: {} or email: {}", googleId, email);
             Admin admin = adminService.findByGoogleIdOrEmail(googleId, email);
             if (admin != null) {
+                log.info("Found admin: {}, generating JWT token", admin.getUsername());
                 // Generate JWT token for the admin
                 final UserDetails userDetails = adminService.loadUserByUsername(admin.getUsername());
                 final String token = jwtTokenUtils.generateToken(userDetails);
+                log.info("Generated JWT token successfully for admin: {}", admin.getUsername());
                 
                 // Create response with admin data and token
                 Map<String, Object> responseData = new HashMap<>();
@@ -177,22 +190,24 @@ public class AdminController {
                 responseData.put("fullName", admin.getFullName());
                 responseData.put("profileImage", admin.getProfileImage());
                 responseData.put("googleId", admin.getGoogleId());
-                responseData.put("isGoogleAccount", admin.isGoogleAccount());
-                responseData.put("token", token);
+                responseData.put("isGoogleAccount", admin.isGoogleAccount());                responseData.put("token", token);
                 responseData.put("accessToken", token);
                 
+                log.info("Returning success response for admin: {}", admin.getUsername());
                 return ResponseEntity.ok(ApiResponse.builder()
                         .payload(responseData)
                         .message("Admin found with Google credentials")
                         .date(LocalDateTime.now())
                         .build());
             } else {
+                log.warn("No admin found with googleId: {} or email: {}", googleId, email);
                 return ResponseEntity.status(404).body(ApiResponse.builder()
                         .message("Admin not found with Google credentials")
                         .date(LocalDateTime.now())
                         .build());
             }
         } catch (Exception e) {
+            log.error("Error checking Google account: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(ApiResponse.builder()
                     .message("Error checking Google account: " + e.getMessage())
                     .date(LocalDateTime.now())
@@ -286,5 +301,75 @@ public class AdminController {
             return ResponseEntity.ok(admin);
         }
         return ResponseEntity.notFound().build();
+    }
+
+    // Password Reset Endpoints
+    @PostMapping("/request-password-reset")
+    public ApiResponse<?> requestPasswordReset(@RequestParam String email)
+            throws MessagingException, UnsupportedEncodingException {
+        log.info("Password reset requested for email: {}", email);
+        adminService.sendOtpViaEmail(email);
+        return ApiResponse.builder()
+                .date(LocalDateTime.now())
+                .message("Password reset OTP sent successfully")
+                .build();
+    }
+
+    @PostMapping("/verify-password-reset-otp")
+    public ApiResponse<?> verifyPasswordResetOtp(@RequestBody OtpRequestEmail otpRequest) {
+        log.info("Verifying password reset OTP for email: {}", otpRequest.getEmail());
+        boolean isValid = otpService.validateOtpEmail(otpRequest.getEmail(), otpRequest.getOtp());
+        if (isValid) {
+            return ApiResponse.builder()
+                    .date(LocalDateTime.now())
+                    .message("OTP verified successfully")
+                    .build();
+        } else {
+            throw new IllegalArgumentException("Invalid OTP code");
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ApiResponse<?> resetPassword(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        String newPassword = request.get("newPassword");
+        String otp = request.get("otp");
+        
+        log.info("Password reset attempt for email: {}", email);
+        
+        // Verify OTP first
+        boolean isValid = otpService.validateOtpEmail(email, otp);
+        if (!isValid) {
+            throw new IllegalArgumentException("Invalid or expired OTP code");
+        }
+        
+        // Find admin and update password
+        Admin admin = adminRepository.findUserByEmail(email);
+        if (admin == null) {
+            throw new IllegalArgumentException("User not found with given email");
+        }
+        
+        // Update password using admin service (this will handle encoding)
+        adminService.resetPassword(email, newPassword);
+        
+        return ApiResponse.builder()
+                .date(LocalDateTime.now())
+                .message("Password reset successfully")
+                .build();
+    }
+
+    @PostMapping("/validate-otp-to-verified-register")
+    public ApiResponse<?> validateOtpToVerifiedRegister(@RequestBody OtpRequestEmail otpRequest) {
+        log.info("Validating OTP for registration verification: {}", otpRequest.getEmail());
+        boolean isValid = otpService.validateOtpEmail(otpRequest.getEmail(), otpRequest.getOtp());
+        if (isValid) {
+            adminService.verifiedEmailByOtp(otpRequest.getEmail());
+            return ApiResponse.builder()
+                    .date(LocalDateTime.now())
+                    .message("Account verified successfully")
+                    .build();
+        } else {
+            throw new IllegalArgumentException("Invalid OTP code");
+        }
     }
 }

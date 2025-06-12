@@ -17,17 +17,16 @@ public class TelegramBotSessionManager {
     private static final AtomicBoolean sessionActive = new AtomicBoolean(false);
     private static TelegramBotsApi botsApi;
     private static LongPollingBot registeredBot;
-    
-    public synchronized boolean registerBot(LongPollingBot bot) throws TelegramApiException {
+      public synchronized boolean registerBot(LongPollingBot bot) throws TelegramApiException {
         if (sessionActive.get()) {
-            logger.warn("Bot session already active - skipping registration");
+            logger.debug("Bot session already active - skipping registration");
             return false;
         }
         
         try {
             // Check for existing running instances by attempting to stop any previous sessions
             if (registeredBot != null) {
-                logger.info("Cleaning up previous bot session");
+                logger.debug("Cleaning up previous bot session");
                 try {
                     registeredBot.onClosing();
                 } catch (Exception e) {
@@ -47,7 +46,7 @@ public class TelegramBotSessionManager {
             
         } catch (TelegramApiException e) {
             if (e.getMessage() != null && (e.getMessage().contains("409") || e.getMessage().contains("Conflict"))) {
-                logger.warn("Bot conflict detected - another instance is likely running. Error: {}", e.getMessage());
+                logger.debug("Bot conflict detected - another instance is likely running. Error: {}", e.getMessage());
                 sessionActive.set(true); // Mark as active to prevent retry attempts
                 return false;
             } else {

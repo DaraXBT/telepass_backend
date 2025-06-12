@@ -1,6 +1,7 @@
 package com.example.tb.model.request;
 
 import com.example.tb.model.entity.Admin;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 import jakarta.validation.constraints.Email;
@@ -23,16 +24,17 @@ public class AdminRequest {    @NotBlank(message = "Username is required")
     private String email;
 
     private String profile;
-    
-    // Google OAuth fields
+      // Google OAuth fields
     private String googleId;
     private String fullName;
     private String profileImage;
+    @JsonProperty("isGoogleAccount")
     private boolean isGoogleAccount = false;
-    private boolean enabled = false;    public Admin toEntity() {
+    private boolean enabled = false;public Admin toEntity() {
         Admin admin = new Admin();
         admin.setUsername(this.username);
-        admin.setPassword(this.password);
+        // Don't set password here - it will be handled by the service layer
+        // admin.setPassword(this.password);
         admin.setEnabled(this.enabled);
         admin.setEmail(this.email);
         admin.setProfile(this.profile);

@@ -371,11 +371,9 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 try {
                     // Extract filename from URL
                     String imagePath = event.getEventImg();
-                    String fileName = imagePath.substring(imagePath.lastIndexOf("=") + 1);
-
-                    // Use ClassPathResource to access the file
+                    String fileName = imagePath.substring(imagePath.lastIndexOf("=") + 1);                    // Use ClassPathResource to access the file
                     ClassPathResource resource = new ClassPathResource("files/" + fileName);
-                    System.out.println("resource " + resource);
+                    logger.debug("Loading resource: {}", resource);
                     if (resource.exists()) {
                         SendPhoto sendPhoto = new SendPhoto();
                         sendPhoto.setChatId(chatId);

@@ -42,8 +42,7 @@ public class AdminServiceImpl implements AdminService {
         this.tokenRepository = tokenRepository;
         this.otpService = otpService;
         this.emailService = emailService;
-    }
-    @PostConstruct
+    }    @PostConstruct
     public void createAdmin() {
         if (adminrepository.findAll().isEmpty()){
             Admin admin = new Admin();
@@ -51,16 +50,18 @@ public class AdminServiceImpl implements AdminService {
             String pass = passwordEncoder.encode(adminPassword);
             admin.setPassword(pass);
             admin.setEmail("daraa.veasna@gmail.com");
-            System.out.println("Creating admin..." + admin);
+            admin.setEnabled(true);
+            log.info("Creating default admin user");
             adminrepository.save(admin);
         }else{
-            System.out.println("already have admin");
+            log.info("Admin user already exists");
         }
-    }
-
-    @Override
+    }    @Override
     public UserDetails loadUserByUsername(String username){
         UserDetails userDetails = adminrepository.findByUsername(username);
+        if (userDetails == null) {
+            throw new org.springframework.security.core.userdetails.UsernameNotFoundException("User not found: " + username);
+        }
         return userDetails;
     }
 
@@ -78,10 +79,11 @@ public class AdminServiceImpl implements AdminService {
             } else if(email) {
                 throw new InternalServerErrorException(
                         "Email already exists"
-                );
-            } else {
-                adminRequest.setPassword(passwordEncoder.encode(adminRequest.getPassword()));
-                adminrepository.save(adminRequest.toEntity());
+                );            } else {
+                String encodedPassword = passwordEncoder.encode(adminRequest.getPassword());
+                Admin newAdmin = adminRequest.toEntity();
+                newAdmin.setPassword(encodedPassword); // Set the encoded password after creating the entity
+                adminrepository.save(newAdmin);
                 String verificationToken = UUID.randomUUID().toString();
                 saveVerificationToken(adminRequest.getUsername(), verificationToken);
 
@@ -118,6 +120,27 @@ public class AdminServiceImpl implements AdminService {
             throw new NotFoundExceptionClass("Admin not found with ID: " + id);
         }
     }
+
+    @Override
+    public void resetPassword(String email, String newPassword) {
+        log.info("Resetting password for email: {}", email);
+        Admin admin = adminrepository.findUserByEmail(email);
+        if (admin == null) {
+            throw new NotFoundExceptionClass("User not found with email: " + email);
+        }
+        
+        // Validate new password
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            throw new IllegalArgumentException("New password cannot be null or empty");
+        }
+        
+        // Encode and save new password
+        String encodedPassword = passwordEncoder.encode(newPassword);
+        admin.setPassword(encodedPassword);
+        adminrepository.save(admin);
+        log.info("Password reset successfully for email: {}", email);
+    }
+
     public void saveVerificationToken(String username, String token) {
         Admin admin = adminrepository.findByUsernameReturnAuth(username);
         VerificationToken verificationToken = new VerificationToken(token, admin);
@@ -222,19 +245,21 @@ public class AdminServiceImpl implements AdminService {
         }
         
         if (adminRequest.getEmail() == null || adminRequest.getEmail().trim().isEmpty()) {
-            throw new IllegalArgumentException("Email cannot be null or empty");
-        }
+            throw new IllegalArgumentException("Email cannot be null or empty");        }
         
         // For Google accounts, set a default encoded password if none provided
+        String encodedPassword;
         if (adminRequest.getPassword() == null || adminRequest.getPassword().trim().isEmpty()) {
-            adminRequest.setPassword(passwordEncoder.encode("GOOGLE_AUTH_" + UUID.randomUUID().toString()));
+            encodedPassword = passwordEncoder.encode("GOOGLE_AUTH_" + UUID.randomUUID().toString());
         } else {
-            adminRequest.setPassword(passwordEncoder.encode(adminRequest.getPassword()));
+            encodedPassword = passwordEncoder.encode(adminRequest.getPassword());
         }
         adminRequest.setEnabled(true); // Google accounts are enabled by default
         adminRequest.setGoogleAccount(true);
         
-        Admin newAdmin = adminrepository.save(adminRequest.toEntity());
+        Admin newAdmin = adminRequest.toEntity();
+        newAdmin.setPassword(encodedPassword); // Set the encoded password after creating the entity
+        newAdmin = adminrepository.save(newAdmin);
         log.info("Successfully created new Google admin with ID: {}", newAdmin.getId());
         return newAdmin;
     }

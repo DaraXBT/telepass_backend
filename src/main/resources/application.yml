@@ -1,26 +1,4 @@
 spring:
-  thymeleaf:
-    prefix: classpath:/templates/
-    suffix: .html
-    mode: HTML
-    cache: false
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: gosellingproject@gmail.com
-    password: mmlrtnqtokjctfgx
-    properties:
-      mail:
-        transport:
-          protocol: smtp
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-            required: true
-          from: contact@email.com
-      from:
-        name: B2B
   application:
     name: telepass
   datasource:
@@ -30,17 +8,47 @@ spring:
     password: postgres
   jpa:
     hibernate:
-      ddl-auto: create-drop
-    show-sql: true
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
+  # Disable mail configuration to prevent health check failures
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
+  # Add minimal mail configuration to prevent property errors
+  mail:
+    username: noop@localhost
+  # Disable actuator endpoints that cause excessive logging
+  management:
+    endpoints:
+      enabled-by-default: false
+    health:
+      mail:
+        enabled: false
   servlet:
     multipart:
       max-file-size: 1000MB
       max-request-size: 1000MB
       enabled: true
       file-size-threshold: 2KB
+
+# Logging configuration to reduce verbosity
+logging:
+  level:
+    org.hibernate: WARN
+    org.springframework: WARN
+    org.apache: WARN
+    com.zaxxer.hikari: WARN
+    jakarta.mail: ERROR
+    org.springframework.boot.actuate: ERROR
+    org.telegram.telegrambots: WARN
+    com.example.tb.configuration.TelegramBotSessionManager: INFO
+    com.example.tb.authentication.service.admin.AdminServiceImpl: INFO
+    com.example.tb.jwt: INFO # Reduce JWT-related logging noise
+    root: INFO
 
 jwt:
   secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
@@ -54,6 +62,9 @@ file-upload:
 
 WebBaseUrl: http://localhost:3000/
 BaseUrl: http://localhost:8080/
+
+server:
+  port: 8080
 
 myAdmin:
   username: admin

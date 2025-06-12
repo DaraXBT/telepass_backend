@@ -34,44 +34,44 @@ public class JwtTokenFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        final String requestTokenHeader = request.getHeader("Authorization");
-
-        String username = null;
+        final String requestTokenHeader = request.getHeader("Authorization");        String username = null;
         String jwtToken = null;
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
             
             // Enhanced JWT validation to prevent parsing errors
             if (jwtToken == null || jwtToken.trim().isEmpty()) {
-                logger.warn("Empty JWT token provided");
+                logger.debug("Empty JWT token provided");
             } else if (jwtToken.split("\\.").length != 3) {
-                logger.warn("Invalid JWT token format - expected 3 parts separated by dots, found: {}", jwtToken.split("\\.").length);
+                logger.debug("Invalid JWT token format - expected 3 parts separated by dots, found: {}", jwtToken.split("\\.").length);
             } else if (jwtToken.equals("google-auth-error") || jwtToken.equals("undefined") || jwtToken.equals("null")) {
-                logger.warn("Invalid JWT token value: {}", jwtToken);
+                logger.debug("Invalid JWT token value: {}", jwtToken);
             } else {
                 try {
                     username = jwtTokenUtil.getUsernameFromToken(jwtToken);
                 } catch (IllegalArgumentException e) {
-                    logger.warn("Unable to get JWT Token: {}", e.getMessage());
+                    logger.debug("Unable to get JWT Token: {}", e.getMessage());
                 } catch (ExpiredJwtException e) {
-                    logger.warn("JWT Token has expired: {}", e.getMessage());
+                    logger.debug("JWT Token has expired: {}", e.getMessage());
                 } catch (Exception e) {
-                    logger.warn("JWT Token parsing error: {}", e.getMessage());
+                    logger.debug("JWT Token parsing error: {}", e.getMessage());
                 }
             }
-        } else if (requestTokenHeader != null) {
-            logger.warn("JWT Token does not begin with Bearer String: {}", requestTokenHeader);
-        }
+        } else if (requestTokenHeader != null && !requestTokenHeader.equals("Bearer")) {
+            logger.debug("JWT Token does not begin with Bearer String: {}", requestTokenHeader);
+        }        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            try {
+                UserDetails userDetails = this.adminServiceImpl.loadUserByUsername(username);
+                if (userDetails != null && jwtTokenUtil.validateToken(jwtToken, userDetails)) {
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.adminServiceImpl.loadUserByUsername(username);
-            if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
-
-                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
-                usernamePasswordAuthenticationToken
-                        .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+                    UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
+                    usernamePasswordAuthenticationToken
+                            .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+                }
+            } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
+                logger.debug("User not found for JWT token: {}", username);
             }
         }
         chain.doFilter(request, response);

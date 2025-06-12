@@ -34,12 +34,26 @@ public class JwtTokenUtils implements Serializable {
 
     //retrieve username from jwt token
     public String getUsernameFromToken(String token) {
-        return getClaimFromToken(token, Claims::getSubject);
+        if (!isValidTokenFormat(token)) {
+            return null;
+        }
+        try {
+            return getClaimFromToken(token, Claims::getSubject);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     //retrieve expiration date from jwt token
     public Date getExpirationDateFromToken(String token) {
-        return getClaimFromToken(token, Claims::getExpiration);
+        if (!isValidTokenFormat(token)) {
+            return null;
+        }
+        try {
+            return getClaimFromToken(token, Claims::getExpiration);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
@@ -51,9 +65,37 @@ public class JwtTokenUtils implements Serializable {
         return Jwts.parser().setSigningKey(secret).parseClaimsJws(token).getBody();
     }
 
+    // Validate token format before parsing
+    private boolean isValidTokenFormat(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return false;
+        }
+        
+        // JWT tokens should have exactly 3 parts separated by dots
+        String[] parts = token.split("\\.");
+        if (parts.length != 3) {
+            return false;
+        }
+        
+        // Check for common invalid token values
+        if (token.equals("google-auth-error") || token.equals("undefined") || 
+            token.equals("null") || token.equals("bearer")) {
+            return false;
+        }
+        
+        return true;
+    }
+
     private Boolean isTokenExpired(String token) {
-        final Date expiration = getExpirationDateFromToken(token);
-        return expiration.before(new Date());
+        if (!isValidTokenFormat(token)) {
+            return true; // Consider invalid tokens as expired
+        }
+        try {
+            final Date expiration = getExpirationDateFromToken(token);
+            return expiration != null && expiration.before(new Date());
+        } catch (Exception e) {
+            return true; // Consider malformed tokens as expired
+        }
     }
 
     private String doGenerateToken(Map<String, Object> claims, String subject) {
@@ -65,8 +107,15 @@ public class JwtTokenUtils implements Serializable {
 
     //validate token
     public Boolean validateToken(String token, UserDetails userDetails) {
-        final String username = getUsernameFromToken(token);
-        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        if (userDetails == null || !isValidTokenFormat(token)) {
+            return false;
+        }
+        try {
+            final String username = getUsernameFromToken(token);
+            return username != null && username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        } catch (Exception e) {
+            return false; // Any exception during validation means invalid token
+        }
     }
 
 }

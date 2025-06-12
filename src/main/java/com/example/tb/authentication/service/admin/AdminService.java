@@ -14,6 +14,7 @@ import java.util.UUID;
 public interface AdminService extends UserDetailsService {
     void saveUser(AdminRequest adminRequest) throws MessagingException, UnsupportedEncodingException;
     void changePassword(UUID id, InfoChangePassword password);
+    void resetPassword(String email, String newPassword);
     void sendOtpViaEmail(String email) throws MessagingException, UnsupportedEncodingException;
     void verifiedEmailByOtp(String email);    void sendEmail(String email, String name, String msg) throws MessagingException, UnsupportedEncodingException;
     boolean verifyEmailToken(String token);

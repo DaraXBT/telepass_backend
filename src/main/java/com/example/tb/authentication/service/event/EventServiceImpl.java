@@ -29,8 +29,10 @@ import com.google.zxing.WriterException;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class EventServiceImpl implements EventService {
     private final EventRepository eventRepository;
     private final EventRoleRepository eventRoleRepository;
@@ -87,52 +89,90 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional
     public Event createEvent(EventRequest eventRequest) {
-        // Convert request to entity
-        Event event = Event.builder()
-                .name(eventRequest.getName())
-                .description(eventRequest.getDescription())
-                .status(eventRequest.getStatus())
-                .category(eventRequest.getCategory())
-                .capacity(eventRequest.getCapacity())
-                .registered(eventRequest.getRegistered())
-                .eventImg(eventRequest.getEventImg())
-                .build();
-
-        // Save the event
-        Event savedEvent = eventRepository.save(event);
-
-        // Generate QR code
-        String qrFileName = "event_" + savedEvent.getId() + ".png";
-        String qrFilePath = "src/main/resources/storage/" + qrFileName;
         try {
-            String telegramCommand = "https://t.me/telepasskhbot?start=event_" + savedEvent.getId();
-            QrCodeUtil.generateComplexQRCode(telegramCommand, 300, 300, qrFilePath);
-            savedEvent.setQrCodePath("storage/" + qrFileName);
-            eventRepository.save(savedEvent);
-        } catch (Exception e) {
-            // handle error
-        }
-
-        // Create initial owner role if specified in request
-        if (eventRequest.getEventRoles() != null && !eventRequest.getEventRoles().isEmpty()) {
-            for (var roleRequest : eventRequest.getEventRoles()) {
-                if (roleRequest.getUserId() == null) {
-                    throw new RuntimeException("User ID cannot be null for event role");
-                }
-
-                Admin user = new Admin();
-                user.setId(roleRequest.getUserId());
-
-                EventRole role = EventRole.builder()
-                        .event(savedEvent)
-                        .user(user)
-                        .role(roleRequest.getRole())
-                        .build();
-                eventRoleRepository.save(role);
+            log.info("Starting event creation process for event: {}", eventRequest.getName());
+            
+            // Validate required fields
+            if (eventRequest.getName() == null || eventRequest.getName().trim().isEmpty()) {
+                throw new IllegalArgumentException("Event name is required");
             }
-        }
+            
+            log.debug("Creating event entity from request");
+            // Convert request to entity
+            Event event = Event.builder()
+                    .name(eventRequest.getName())
+                    .description(eventRequest.getDescription())
+                    .status(eventRequest.getStatus())
+                    .category(eventRequest.getCategory())
+                    .capacity(eventRequest.getCapacity())
+                    .registered(eventRequest.getRegistered())
+                    .eventImg(eventRequest.getEventImg())
+                    .build();
 
-        return savedEvent;
+            // Save the event
+            log.debug("Saving event to database");
+            Event savedEvent = eventRepository.save(event);
+            log.info("Event saved successfully with ID: {}", savedEvent.getId());
+
+            // Generate QR code
+            log.debug("Generating QR code for event: {}", savedEvent.getId());
+            String qrFileName = "event_" + savedEvent.getId() + ".png";
+            String qrFilePath = "src/main/resources/storage/" + qrFileName;
+            
+            try {
+                // Ensure storage directory exists
+                File storageDir = new File("src/main/resources/storage");
+                if (!storageDir.exists()) {
+                    log.debug("Creating storage directory: {}", storageDir.getAbsolutePath());
+                    storageDir.mkdirs();
+                }
+                
+                String telegramCommand = "https://t.me/telepasskhbot?start=event_" + savedEvent.getId();
+                log.debug("Generating QR code with command: {}", telegramCommand);
+                QrCodeUtil.generateComplexQRCode(telegramCommand, 300, 300, qrFilePath);
+                
+                savedEvent.setQrCodePath("storage/" + qrFileName);
+                eventRepository.save(savedEvent);
+                log.info("QR code generated and saved successfully");
+            } catch (Exception e) {
+                log.error("Failed to generate QR code for event {}: {}", savedEvent.getId(), e.getMessage(), e);
+                // Continue without QR code - don't fail the entire operation
+            }
+
+            // Create initial owner role if specified in request
+            if (eventRequest.getEventRoles() != null && !eventRequest.getEventRoles().isEmpty()) {
+                log.debug("Creating {} event roles", eventRequest.getEventRoles().size());
+                for (var roleRequest : eventRequest.getEventRoles()) {
+                    try {
+                        if (roleRequest.getUserId() == null) {
+                            log.warn("Skipping event role with null user ID");
+                            continue;
+                        }
+
+                        Admin user = new Admin();
+                        user.setId(roleRequest.getUserId());
+
+                        EventRole role = EventRole.builder()
+                                .event(savedEvent)
+                                .user(user)
+                                .role(roleRequest.getRole())
+                                .build();
+                        eventRoleRepository.save(role);
+                        log.debug("Created event role for user: {}", roleRequest.getUserId());
+                    } catch (Exception e) {
+                        log.error("Failed to create event role for user {}: {}", roleRequest.getUserId(), e.getMessage(), e);
+                        // Continue with other roles - don't fail the entire operation
+                    }
+                }
+            }
+
+            log.info("Event creation completed successfully for ID: {}", savedEvent.getId());
+            return savedEvent;
+            
+        } catch (Exception e) {
+            log.error("Event creation failed: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to create event: " + e.getMessage(), e);
+        }
     }
 
     @Override

@@ -2,6 +2,8 @@ package com.example.tb.authentication.service.otp;
 
 
 import org.apache.commons.codec.binary.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -12,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class OtpServiceImpl implements OtpService {
+    private static final Logger logger = LoggerFactory.getLogger(OtpServiceImpl.class);
     private final Map<String, String> otpStore = new HashMap<>();
     private final SecureRandom random = new SecureRandom();
     @Override
@@ -47,11 +50,9 @@ public class OtpServiceImpl implements OtpService {
                 TimeUnit.MINUTES.toMillis(2)
         );
         return otp;
-    }
-
-    @Override
+    }    @Override
     public boolean validateOtp(String username, String otp) {
-        System.out.println(otp.equals(otpStore.get(username)));
+        logger.debug("Validating OTP for username: {}", username);
         return otp.equals(otpStore.get(username));
     }
 
