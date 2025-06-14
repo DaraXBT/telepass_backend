@@ -1,5 +1,6 @@
 package com.example.tb.model.response;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -26,6 +27,12 @@ public class EventResponse {
     private String qrCodePath;
     private String eventImg;
     private UUID adminId; // Admin who created/owns this event
+    
+    // New fields for event scheduling and location
+    private LocalDateTime startDateTime;
+    private LocalDateTime endDateTime;
+    private String location; // Can be text or URL for event location
+    
     private List<EventRole> eventRoles;
     private Set<UUID> registeredUsers;
 }

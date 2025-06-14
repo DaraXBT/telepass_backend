@@ -14,4 +14,7 @@ public interface OtpService {
     String decodeEmailToken(String token);
 
     boolean validateEmailToken(String token, String email);
+
+    // DEBUG METHOD - REMOVE IN PRODUCTION
+    String getCurrentOtpForDebug(String email);
 }

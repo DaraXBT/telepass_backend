@@ -21,12 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.tb.authentication.repository.events.EventRepository;
 import com.example.tb.authentication.repository.events.EventRoleRepository;
 import com.example.tb.authentication.service.UserRegistrationService;
+import com.example.tb.model.dto.EventRoleDTO;
 import com.example.tb.model.entity.Admin;
 import com.example.tb.model.entity.Event;
 import com.example.tb.model.entity.EventRole;
 import com.example.tb.model.entity.User;
 import com.example.tb.model.request.AddEventRoleRequest;
 import com.example.tb.model.request.EventRequest;
+import com.example.tb.model.request.EventRoleRequest;
 import com.example.tb.model.response.EventResponse;
 import com.example.tb.utils.QrCodeUtil;
 import com.google.zxing.WriterException;
@@ -82,8 +84,7 @@ public class EventServiceImpl implements EventService {
         } catch (Exception e) {
             log.warn("Could not load registered users for event {}: {}", event.getId(), e.getMessage());
             // Continue with empty set
-        }
-          return EventResponse.builder()
+        }          return EventResponse.builder()
                 .id(event.getId())
                 .name(event.getName())
                 .description(event.getDescription())
@@ -94,6 +95,9 @@ public class EventServiceImpl implements EventService {
                 .qrCodePath(event.getQrCodePath())
                 .eventImg(event.getEventImg())
                 .adminId(event.getAdminId())
+                .startDateTime(event.getStartDateTime())
+                .endDateTime(event.getEndDateTime())
+                .location(event.getLocation())
                 .eventRoles(new ArrayList<>()) // Return empty list to avoid circular reference issues
                 .registeredUsers(registeredUserIds)
                 .build();
@@ -108,8 +112,7 @@ public class EventServiceImpl implements EventService {
             // Validate required fields
             if (eventRequest.getName() == null || eventRequest.getName().trim().isEmpty()) {
                 throw new IllegalArgumentException("Event name is required");
-            }
-              log.debug("Creating event entity from request");
+            }              log.debug("Creating event entity from request");
             // Convert request to entity
             Event event = Event.builder()
                     .name(eventRequest.getName())
@@ -120,6 +123,9 @@ public class EventServiceImpl implements EventService {
                     .registered(eventRequest.getRegistered())
                     .eventImg(eventRequest.getEventImg())
                     .adminId(eventRequest.getAdminId())
+                    .startDateTime(eventRequest.getStartDateTime())
+                    .endDateTime(eventRequest.getEndDateTime())
+                    .location(eventRequest.getLocation())
                     .build();
 
             // Save the event
@@ -150,34 +156,8 @@ public class EventServiceImpl implements EventService {
             } catch (Exception e) {
                 log.error("Failed to generate QR code for event {}: {}", savedEvent.getId(), e.getMessage(), e);
                 // Continue without QR code - don't fail the entire operation
-            }
-
-            // Create initial owner role if specified in request
-            if (eventRequest.getEventRoles() != null && !eventRequest.getEventRoles().isEmpty()) {
-                log.debug("Creating {} event roles", eventRequest.getEventRoles().size());
-                for (var roleRequest : eventRequest.getEventRoles()) {
-                    try {
-                        if (roleRequest.getUserId() == null) {
-                            log.warn("Skipping event role with null user ID");
-                            continue;
-                        }
-
-                        Admin user = new Admin();
-                        user.setId(roleRequest.getUserId());
-
-                        EventRole role = EventRole.builder()
-                                .event(savedEvent)
-                                .user(user)
-                                .role(roleRequest.getRole())
-                                .build();
-                        eventRoleRepository.save(role);
-                        log.debug("Created event role for user: {}", roleRequest.getUserId());
-                    } catch (Exception e) {
-                        log.error("Failed to create event role for user {}: {}", roleRequest.getUserId(), e.getMessage(), e);
-                        // Continue with other roles - don't fail the entire operation
-                    }
-                }
-            }
+            }            // Create initial owner role if specified in request
+            handleEventRoles(savedEvent.getId(), eventRequest.getEventRoles(), savedEvent, false);
 
             log.info("Event creation completed successfully for ID: {}", savedEvent.getId());
             return savedEvent;
@@ -229,9 +209,7 @@ public class EventServiceImpl implements EventService {
             }
             if (existingEvent.getRegistered() != eventRequest.getRegistered()) {
                 log.debug("Registered count changing from {} to {}", existingEvent.getRegistered(), eventRequest.getRegistered());
-            }
-            
-            // Update event fields
+            }              // Update event fields
             existingEvent.setName(eventRequest.getName());
             existingEvent.setDescription(eventRequest.getDescription());
             existingEvent.setStatus(eventRequest.getStatus());
@@ -240,9 +218,14 @@ public class EventServiceImpl implements EventService {
             existingEvent.setRegistered(eventRequest.getRegistered());
             existingEvent.setEventImg(eventRequest.getEventImg());
             existingEvent.setAdminId(eventRequest.getAdminId());
-            
-            log.debug("All fields updated, saving to database...");
+            existingEvent.setStartDateTime(eventRequest.getStartDateTime());
+            existingEvent.setEndDateTime(eventRequest.getEndDateTime());
+            existingEvent.setLocation(eventRequest.getLocation());
+              log.debug("All fields updated, saving to database...");
             Event savedEvent = eventRepository.save(existingEvent);
+
+            // Handle event roles update if specified in request
+            handleEventRoles(savedEvent.getId(), eventRequest.getEventRoles(), savedEvent, true);
             
             log.info("Successfully updated event with ID: {}", savedEvent.getId());
             log.debug("Final event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}", 
@@ -363,16 +346,79 @@ public class EventServiceImpl implements EventService {
 
         // Delete the role
         eventRoleRepository.deleteByEventIdAndUserId(eventId, userId);
-    }
-
-    @Override
+    }    @Override
     public List<EventRole> getEventRoles(UUID eventId) {
         // Check if the event exists
         if (!eventRepository.existsById(eventId)) {
             throw new RuntimeException("Event not found");        }
 
         return eventRoleRepository.findByEventId(eventId);
-    }    @Override
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventRoleDTO> getEventRolesAsDTO(UUID eventId) {
+        // Check if the event exists
+        if (!eventRepository.existsById(eventId)) {
+            throw new RuntimeException("Event not found");
+        }
+
+        List<EventRole> eventRoles = eventRoleRepository.findByEventId(eventId);
+        return eventRoles.stream()
+                .map(this::convertToEventRoleDTO)
+                .collect(Collectors.toList());
+    }
+
+    private EventRoleDTO convertToEventRoleDTO(EventRole eventRole) {
+        return EventRoleDTO.builder()
+                .id(eventRole.getId())
+                .userId(eventRole.getUser().getId())
+                .username(eventRole.getUser().getUsername())
+                .role(eventRole.getRole())
+                .email(eventRole.getUser().getEmail())
+                .build();
+    }
+
+    private void handleEventRoles(UUID eventId, List<EventRoleRequest> eventRoleRequests, Event event, boolean isUpdate) {
+        if (eventRoleRequests == null || eventRoleRequests.isEmpty()) {
+            log.debug("No event roles provided - skipping role handling");
+            return;
+        }
+
+        log.debug("Handling {} event roles for event ID: {}", eventRoleRequests.size(), eventId);
+
+        // If this is an update, remove existing roles first
+        if (isUpdate) {
+            log.debug("Removing existing event roles for event ID: {}", eventId);
+            eventRoleRepository.deleteByEventId(eventId);
+        }
+
+        // Add new roles from request
+        for (var roleRequest : eventRoleRequests) {
+            try {
+                if (roleRequest.getUserId() == null) {
+                    log.warn("Skipping event role with null user ID");
+                    continue;
+                }
+
+                Admin user = new Admin();
+                user.setId(roleRequest.getUserId());
+
+                EventRole role = EventRole.builder()
+                        .event(event)
+                        .user(user)
+                        .role(roleRequest.getRole())
+                        .build();
+                eventRoleRepository.save(role);
+                log.debug("Created event role for user: {} with role: {}", roleRequest.getUserId(), roleRequest.getRole());
+            } catch (Exception e) {
+                log.error("Failed to create event role for user {}: {}", roleRequest.getUserId(), e.getMessage(), e);
+                // Continue with other roles - don't fail the entire operation
+            }
+        }
+        log.debug("Event roles handling completed");
+    }
+    @Override
     @Transactional(readOnly = true)
     public List<EventResponse> getEventsByAdminId(UUID adminId) {
         log.info("Getting events for admin ID: {}", adminId);

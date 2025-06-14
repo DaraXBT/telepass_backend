@@ -69,14 +69,16 @@ public class User {
     private String registrationToken;
 
     @ManyToMany(mappedBy = "registeredUsers")
-    private Set<Event> registeredEvents = new HashSet<>();
-
-    @Column(name = "checked_in")
+    private Set<Event> registeredEvents = new HashSet<>();    @Column(name = "checked_in")
     private boolean checkedIn = false;
+
+    @Column(name = "qr_code")
+    private String qrCode;
 
     public enum Gender {
         MALE, FEMALE, OTHER
     }
+
 
     // Constructors, getters, and setters
     public User() {

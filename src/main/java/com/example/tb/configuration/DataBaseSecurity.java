@@ -52,10 +52,10 @@ public class DataBaseSecurity {
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.cors();
         http.csrf()
-                .disable()
-                .authorizeHttpRequests(request -> request
+                .disable()                .authorizeHttpRequests(request -> request
                         .requestMatchers(
                                 "/api/v1/admin/**",
+                                "/api/v1/otp/**",
                                 "/api/v1/images/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",

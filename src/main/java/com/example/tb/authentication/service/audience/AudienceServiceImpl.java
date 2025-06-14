@@ -1,9 +1,15 @@
 package com.example.tb.authentication.service.audience;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,6 +86,13 @@ public class AudienceServiceImpl implements AudienceService {
         return new VerificationResponseDTO(true, "Registration verified and user checked in", convertToDTO(user));
     }
 
+    @Override
+    public Resource getQRCodeImage(String fileName) throws IOException {
+        Path filePath = Paths.get("src/main/resources/qrcode", fileName);
+        byte[] fileBytes = Files.readAllBytes(filePath);
+        return new ByteArrayResource(fileBytes);
+    }
+
     private UserDTO convertToDTO(User user) {
         return new UserDTO(
                 user.getId(),
@@ -90,6 +103,9 @@ public class AudienceServiceImpl implements AudienceService {
                 user.getAddress(),
                 user.getEmail(),
                 user.getOccupation(),
-                user.getRegistrationToken());
+                user.getRegistrationToken(),
+                user.isCheckedIn(),
+                user.getQrCode()
+        );
     }
 }

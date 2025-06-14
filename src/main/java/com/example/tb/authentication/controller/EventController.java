@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.tb.authentication.service.event.EventService;
+import com.example.tb.model.dto.EventRoleDTO;
 import com.example.tb.model.entity.Event;
 import com.example.tb.model.entity.EventRole;
 import com.example.tb.model.request.AddEventRoleRequest;
@@ -64,8 +65,7 @@ public class EventController {
             log.debug("Event request details: {}", eventRequest);
             
             Event createdEvent = eventService.createEvent(eventRequest);
-            
-            // Convert to EventResponse to avoid serialization issues
+              // Convert to EventResponse to avoid serialization issues
             EventResponse eventResponse = EventResponse.builder()
                     .id(createdEvent.getId())
                     .name(createdEvent.getName())
@@ -77,6 +77,9 @@ public class EventController {
                     .qrCodePath(createdEvent.getQrCodePath())
                     .eventImg(createdEvent.getEventImg())
                     .adminId(createdEvent.getAdminId())
+                    .startDateTime(createdEvent.getStartDateTime())
+                    .endDateTime(createdEvent.getEndDateTime())
+                    .location(createdEvent.getLocation())
                     .eventRoles(new ArrayList<>()) // Empty list to avoid circular reference
                     .registeredUsers(new HashSet<>()) // Empty set to avoid lazy loading issues
                     .build();
@@ -161,8 +164,8 @@ public class EventController {
         eventService.removeEventRole(eventId, userId);
     }
     @GetMapping("/{eventId}/roles")
-    public List<EventRole> getEventRoles(@PathVariable UUID eventId) {
-        return eventService.getEventRoles(eventId);
+    public List<EventRoleDTO> getEventRoles(@PathVariable UUID eventId) {
+        return eventService.getEventRolesAsDTO(eventId);
     }
 
     @GetMapping("/admin/{adminId}")
@@ -187,8 +190,7 @@ public class EventController {
                 log.warn("Event not found for debug with ID: {}", id);
                 return ResponseEntity.notFound().build();
             }
-            
-            EventResponse event = eventOpt.get();
+              EventResponse event = eventOpt.get();
             Map<String, Object> debugInfo = new HashMap<>();
             debugInfo.put("eventId", event.getId());
             debugInfo.put("name", event.getName());
@@ -200,6 +202,9 @@ public class EventController {
             debugInfo.put("adminId", event.getAdminId());
             debugInfo.put("eventImg", event.getEventImg());
             debugInfo.put("qrCodePath", event.getQrCodePath());
+            debugInfo.put("startDateTime", event.getStartDateTime());
+            debugInfo.put("endDateTime", event.getEndDateTime());
+            debugInfo.put("location", event.getLocation());
             
             log.info("Debug info retrieved for event: {}", event.getName());
             return ResponseEntity.ok(debugInfo);

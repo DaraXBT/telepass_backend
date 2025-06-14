@@ -13,21 +13,39 @@ spring:
     open-in-view: false
     properties:
       hibernate:
-        format_sql: false
-  # Disable mail configuration to prevent health check failures
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
-  # Add minimal mail configuration to prevent property errors
+        format_sql: false # Mail configuration for OTP - Google SMTP Configuration
   mail:
-    username: noop@localhost
+    host: smtp.gmail.com
+    port: 587
+    username: daraa.dev@gmail.com
+    password: kybx juvu gcui tdrs # Make sure to use App Password if 2FA is enabled on Gmail
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        transport:
+          protocol: smtp
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            enable: false
+            trust: smtp.gmail.com
+          connectiontimeout: 30000
+          timeout: 30000
+          writetimeout: 30000
+          localhost: telepass-app # Explicitly set hostname to avoid invalid characters
+        debug: false
+
   # Disable actuator endpoints that cause excessive logging
   management:
     endpoints:
       enabled-by-default: false
     health:
       mail:
-        enabled: false
+        enabled: true
   servlet:
     multipart:
       max-file-size: 1000MB
@@ -42,7 +60,7 @@ logging:
     org.springframework: WARN
     org.apache: WARN
     com.zaxxer.hikari: WARN
-    jakarta.mail: ERROR
+    jakarta.mail: DEBUG
     org.springframework.boot.actuate: ERROR
     org.telegram.telegrambots: WARN
     com.example.tb.configuration.TelegramBotSessionManager: INFO
@@ -69,3 +87,27 @@ server:
 myAdmin:
   username: admin
   password: admin123
+
+# OTP Configuration
+otp:
+  expiration-time: 300 # 5 minutes in seconds
+  length: 6 # Number of digits in OTP
+  max-attempts: 3 # Maximum verification attempts
+  cooldown-time: 60 # Cooldown time in seconds before requesting new OTP
+  email:
+    subject: "Your OTP Code"
+    template: |
+      Dear User,
+        Your One-Time Password (OTP) is: {otp}
+
+      This code will expire in {expiration} minutes.
+
+      If you didn't request this code, please ignore this email.
+
+      Best regards,
+      Telepass Team
+
+# Disable debug mode for email testing (set to false for production)
+mail:
+  debug:
+    mode: false

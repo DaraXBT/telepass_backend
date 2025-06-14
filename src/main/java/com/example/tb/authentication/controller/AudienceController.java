@@ -3,6 +3,8 @@ package com.example.tb.authentication.controller;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.tb.authentication.service.audience.AudienceService;
+import com.example.tb.exception.RequestIncorrectException;
 import com.example.tb.model.dto.UserDTO;
 import com.example.tb.model.dto.VerificationResponseDTO;
 
@@ -51,5 +54,15 @@ public class AudienceController {
             @RequestParam UUID eventId,
             @RequestParam UUID userId) {
         return ResponseEntity.ok(audienceService.verifyRegistration(eventId, userId));
+    }
+
+    @GetMapping("/qrcode")
+    public ResponseEntity<?> getQRCodeImage(@RequestParam String fileName) {
+        try {
+            Resource file = audienceService.getQRCodeImage(fileName);
+            return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(file);
+        } catch (Exception e) {
+            throw new RequestIncorrectException("Incorrect Name", "This QR code file doesn't exist.");
+        }
     }
 }

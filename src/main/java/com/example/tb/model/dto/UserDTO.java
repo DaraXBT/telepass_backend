@@ -22,4 +22,8 @@ public class UserDTO {
     private String email;
     private String occupation;
     private String registrationToken;
+    private boolean checkedIn;
+    private String qrCode;
+
+
 }

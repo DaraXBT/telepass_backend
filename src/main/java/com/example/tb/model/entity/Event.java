@@ -1,5 +1,6 @@
 package com.example.tb.model.entity;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,6 +40,16 @@ public class Event {
     private String qrCodePath;
     private String eventImg; // Path to event image
     private UUID adminId; // Admin who created/owns this event
+    
+    // New fields for event scheduling and location
+    @Column(name = "start_date_time")
+    private LocalDateTime startDateTime;
+    
+    @Column(name = "end_date_time")
+    private LocalDateTime endDateTime;
+    
+    @Column(name = "location", columnDefinition = "TEXT")
+    private String location; // Can be text or URL for event location
 
     @OneToMany(mappedBy = "event")
     @JsonIgnore // Prevent circular reference during JSON serialization

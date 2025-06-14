@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.example.tb.model.dto.EventRoleDTO;
 import com.example.tb.model.entity.Event;
 import com.example.tb.model.entity.EventRole;
 import com.example.tb.model.entity.User;
@@ -34,6 +35,8 @@ public interface EventService {
     void removeEventRole(UUID eventId, UUID userId);
 
     List<EventRole> getEventRoles(UUID eventId);
+
+    List<EventRoleDTO> getEventRolesAsDTO(UUID eventId);
     
     // Get events by admin ID
     List<EventResponse> getEventsByAdminId(UUID adminId);

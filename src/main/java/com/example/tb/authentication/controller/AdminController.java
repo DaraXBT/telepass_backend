@@ -421,4 +421,21 @@ public class AdminController {
             throw new IllegalArgumentException("Invalid OTP code");
         }
     }
+
+    // DEBUG ENDPOINT - REMOVE IN PRODUCTION
+    @GetMapping("/debug/show-otp")
+    public ResponseEntity<Map<String, Object>> showCurrentOtp(@RequestParam String email) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            // This is a debug method - we'll need to add this to OtpService
+            String currentOtp = otpService.getCurrentOtpForDebug(email);
+            response.put("email", email);
+            response.put("currentOtp", currentOtp);
+            response.put("warning", "DEBUG ONLY - REMOVE IN PRODUCTION");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("error", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
 }

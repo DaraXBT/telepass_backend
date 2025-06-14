@@ -34,6 +34,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import com.example.tb.authentication.service.UserRegistrationService;
 import com.example.tb.authentication.service.event.EventService;
 import com.example.tb.model.dto.VerificationResponseDTO;
+import com.example.tb.model.entity.Event;
 import com.example.tb.model.entity.EventRole;
 import com.example.tb.model.entity.User;
 import com.example.tb.model.response.EventResponse;
@@ -64,12 +65,12 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
     @Override
     public String getBotToken() {
         return botToken;
-    }
-
-    @Autowired
+    }    @Autowired
     private UserRegistrationService userRegistrationService;
     @Autowired
     private EventService eventService;
+    @Autowired
+    private com.example.tb.authentication.repository.admin.AdminRepository adminRepository;
     private Map<Long, RegistrationContext> registrationContexts = new ConcurrentHashMap<>();    @Override
     public void onUpdateReceived(Update update) {
         try {
@@ -266,9 +267,7 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                         sendMessage(chatId, "⚠️ អ៊ីមែលមិនត្រឹមត្រូវ។ សូមបញ្ចូលអ៊ីមែលម្តងទៀត។\n" +
                                 "ឬស្កេន QR Code ម្តងទៀតដើម្បីចាប់ផ្តើមការចុះឈ្មោះ។");
                     }
-                    break;
-
-                case OCCUPATION:
+                    break;                case OCCUPATION:
                     if (isValidOccupation(messageText)) {
                         context.getUser().setOccupation(messageText);
 
@@ -280,7 +279,15 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                             eventService.registerUserForEvent(context.getEventId(), registeredUser);
                         }
 
-                        // Generate QR Code with correct format
+                        // Generate QR Code and save to filesystem
+                        String qrCodeFilePath = userRegistrationService.generateAndSaveQRCode(
+                                context.getEventId().toString(),
+                                registeredUser.getId().toString(),
+                                registeredUser.getRegistrationToken());                        // Update user with QR code file path
+                        registeredUser.setQrCode(qrCodeFilePath);
+                        userRegistrationService.updateUser(registeredUser);
+
+                        // Generate Base64 QR Code for Telegram
                         String qrCodeBase64 = userRegistrationService.generateQRCode(
                                 context.getEventId().toString(),
                                 registeredUser.getId().toString(),
@@ -385,30 +392,41 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 } catch (Exception e) {
                     logger.error("Error sending event image", e);
                 }
-            }
-
-            // Send welcome message for event registration
+            }            // Send welcome message for event registration
+            // Fetch event roles directly from EventService since EventResponse has empty eventRoles list
+            java.util.List<com.example.tb.model.entity.EventRole> eventRoles = 
+                eventService.getEventRoles(eventId);
+            
+            logger.info("Fetched {} event roles for event ID: {}", 
+                eventRoles != null ? eventRoles.size() : 0, eventId);
+            
+            // Format datetime information
+            String dateTimeInfo = formatEventDateTime(event);
+            
+            // Format location information
+            String locationInfo = formatEventLocation(event);
+            
             String welcomeMessage = String.format("""
                     🎉 សូមស្វាគមន៍មកកាន់ការចុះឈ្មោះចូលរួមព្រឹត្តិការណ៍!
 
                     📋 ព្រឹត្តិការណ៍: %s
                     📝 ការពិពណ៌នា: %s
-                    👥 អ្នករៀបចំ: %s
+                    👥 អ្នករៀបចំ: %s%s%s
 
                     សូមបំពេញព័ត៌មានខាងក្រោមដើម្បីចុះឈ្មោះ៖
                     ✍️ សូមបញ្ចូលឈ្មោះពេញរបស់អ្នក៖""",
                     event.getName(),
                     event.getDescription(),
-                    formatOrganizers(event.getEventRoles()));
+                    formatOrganizers(eventRoles),
+                    dateTimeInfo,
+                    locationInfo);
 
             sendMessage(chatId, welcomeMessage);
         } catch (Exception e) {
             logger.error("Error starting event registration", e);
             sendMessage(chatId, "❌ មានកំហុសក្នុងការចុះឈ្មោះ។ សូមព្យាយាមម្តងទៀត។");
         }
-    }
-
-    private String formatOrganizers(List<EventRole> roles) {
+    }    private String formatOrganizers(List<EventRole> roles) {
         if (roles == null || roles.isEmpty()) {
             return "មិនមានអ្នករៀបចំ";
         }
@@ -420,10 +438,77 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 if (organizers.length() > 0) {
                     organizers.append(", ");
                 }
-                organizers.append(role.getUser().getUsername());
+                
+                // Get user ID from event role and fetch full name from Admin table
+                String displayName = "Unknown"; // default fallback
+                java.util.UUID userId = role.getUser().getId();
+                
+                logger.info("Fetching organizer info for user ID: {}", userId);
+                
+                try {
+                    // Get fallback username first
+                    if (role.getUser().getUsername() != null) {
+                        displayName = role.getUser().getUsername();
+                    }
+                    
+                    // Try to get full name from Admin table using user_id
+                    java.util.Optional<com.example.tb.model.entity.Admin> adminOptional = 
+                        adminRepository.findById(userId);
+                    
+                    if (adminOptional.isPresent()) {
+                        com.example.tb.model.entity.Admin admin = adminOptional.get();
+                        logger.info("Found admin record - Username: {}, FullName: {}", 
+                            admin.getUsername(), admin.getFullName());
+                        
+                        if (admin.getFullName() != null && !admin.getFullName().trim().isEmpty()) {
+                            displayName = admin.getFullName();
+                            logger.info("Using full name: {}", displayName);
+                        } else {
+                            logger.warn("Admin full name is null or empty for user ID: {}", userId);
+                        }
+                    } else {
+                        logger.warn("No admin record found for user ID: {}", userId);
+                    }
+                } catch (Exception e) {
+                    // Log error but continue with username fallback
+                    logger.error("Failed to fetch admin full name for user ID {}: {}", userId, e.getMessage(), e);
+                }
+                
+                organizers.append(displayName);
+                logger.info("Added organizer to list: {}", displayName);
             }
         }
-        return organizers.length() > 0 ? organizers.toString() : "មិនមានអ្នករៀបចំ";
+        
+        String result = organizers.length() > 0 ? organizers.toString() : "មិនមានអ្នករៀបចំ";
+        logger.info("Final organizers string: {}", result);
+        return result;
+    }
+
+    // Debug method to test organizer formatting - REMOVE IN PRODUCTION
+    public String debugFormatOrganizers(java.util.UUID eventId) {
+        try {
+            java.util.Optional<com.example.tb.model.response.EventResponse> eventOptional = eventService.getEventById(eventId);
+            if (eventOptional.isPresent()) {
+                com.example.tb.model.response.EventResponse event = eventOptional.get();
+                logger.info("DEBUG: Event found - Name: {}, Description: {}", event.getName(), event.getDescription());
+                
+                // Get event roles for this event
+                java.util.List<com.example.tb.model.entity.EventRole> roles = eventService.getEventRoles(eventId);
+                logger.info("DEBUG: Found {} event roles", roles.size());
+                
+                for (com.example.tb.model.entity.EventRole role : roles) {
+                    logger.info("DEBUG: Role - ID: {}, Type: {}, User ID: {}, Username: {}", 
+                        role.getId(), role.getRole(), role.getUser().getId(), role.getUser().getUsername());
+                }
+                
+                return formatOrganizers(roles);
+            } else {
+                return "Event not found";
+            }
+        } catch (Exception e) {
+            logger.error("DEBUG: Error in debugFormatOrganizers: {}", e.getMessage(), e);
+            return "Error: " + e.getMessage();
+        }
     }
 
     // Validation methods (simplified, you should enhance these)
@@ -542,6 +627,132 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 user.getAddress(),
                 user.getEmail(),
                 user.getOccupation());
+    }    /**
+     * Formats event datetime information for display in welcome message
+     */
+    private String formatEventDateTime(EventResponse event) {
+        if (event.getStartDateTime() == null && event.getEndDateTime() == null) {
+            return "";
+        }
+
+        StringBuilder dateTimeInfo = new StringBuilder("\n");
+        
+        if (event.getStartDateTime() != null) {
+            dateTimeInfo.append("📅 ចាប់ផ្តើម: ")
+                       .append(event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+        }
+        
+        if (event.getEndDateTime() != null) {
+            if (event.getStartDateTime() != null) {
+                dateTimeInfo.append("\n");
+            }
+            dateTimeInfo.append("🏁 បញ្ចប់: ")
+                       .append(event.getEndDateTime().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+        }
+        
+        return dateTimeInfo.toString();
+    }
+
+    /**
+     * Formats event location information for display in welcome message
+     */
+    private String formatEventLocation(EventResponse event) {
+        if (event.getLocation() == null || event.getLocation().trim().isEmpty()) {
+            return "";
+        }
+        
+        return "\n📍 ទីតាំង: " + event.getLocation();
+    }
+
+    /**
+     * Sends location as a map if the location string appears to be a valid URL
+     */
+    private void sendLocationIfPossible(long chatId, String location) {
+        try {
+            // Check if location is a valid URL (Google Maps, other map services)
+            if (isValidMapUrl(location)) {
+                // For Google Maps links, we can extract coordinates and send as location
+                if (location.contains("maps.google.com") || location.contains("goo.gl/maps")) {
+                    sendMapLink(chatId, location);
+                } else {
+                    // For other URLs, just send as a clickable link
+                    sendMessage(chatId, "🗺️ ទីតាំងលើផែនទី: " + location);
+                }
+            } else {
+                // Check if it looks like coordinates (latitude,longitude)
+                if (isCoordinateFormat(location)) {
+                    sendCoordinatesAsLocation(chatId, location);
+                } else {
+                    // Send as a regular location text with map search option
+                    sendMessage(chatId, "🗺️ ស្វែងរកទីតាំង: https://www.google.com/maps/search/" + 
+                               java.net.URLEncoder.encode(location, "UTF-8"));
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error sending location information", e);
+            // Fallback: just send the location as text
+            sendMessage(chatId, "📍 ទីតាំង: " + location);
+        }
+    }
+
+    /**
+     * Checks if a string is a valid map URL
+     */
+    private boolean isValidMapUrl(String location) {
+        if (location == null || location.trim().isEmpty()) {
+            return false;
+        }
+        
+        location = location.toLowerCase();
+        return location.startsWith("http://") || location.startsWith("https://") &&
+               (location.contains("maps.google.com") || 
+                location.contains("goo.gl/maps") ||
+                location.contains("google.com/maps") ||
+                location.contains("maps.app.goo.gl") ||
+                location.contains("openstreetmap.org") ||
+                location.contains("waze.com"));
+    }
+
+    /**
+     * Checks if a string is in coordinate format (latitude,longitude)
+     */
+    private boolean isCoordinateFormat(String location) {
+        if (location == null || location.trim().isEmpty()) {
+            return false;
+        }
+        
+        // Check for patterns like "11.5564,104.9282" or "11.5564, 104.9282"
+        String pattern = "^-?\\d+\\.\\d+\\s*,\\s*-?\\d+\\.\\d+$";
+        return location.trim().matches(pattern);
+    }    /**
+     * Sends a map link message
+     */
+    private void sendMapLink(long chatId, String mapUrl) {
+        String message = "🗺️ បើកទីតាំងលើផែនទី:\n" + mapUrl;
+        sendMessage(chatId, message);
+    }
+
+    /**
+     * Sends coordinates as a location that can be opened in map apps
+     */
+    private void sendCoordinatesAsLocation(long chatId, String coordinates) {
+        try {
+            String[] parts = coordinates.split(",");
+            if (parts.length == 2) {
+                double lat = Double.parseDouble(parts[0].trim());
+                double lng = Double.parseDouble(parts[1].trim());
+                
+                // Create Google Maps link
+                String mapUrl = String.format("https://www.google.com/maps?q=%f,%f", lat, lng);
+                sendMessage(chatId, "🗺️ ទីតាំងលើផែនទី:\n" + mapUrl);
+                
+                // Note: Telegram Bot API also supports sending actual location with sendLocation method
+                // but it requires additional setup with coordinates
+            }
+        } catch (NumberFormatException e) {
+            logger.error("Invalid coordinate format: " + coordinates, e);
+            sendMessage(chatId, "📍 ទីតាំង: " + coordinates);
+        }
     }
 
 }
