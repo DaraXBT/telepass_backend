@@ -12,6 +12,7 @@ import com.example.tb.model.entity.Admin;
 import com.example.tb.model.request.AdminRequest;
 import jakarta.annotation.PostConstruct;
 import jakarta.mail.MessagingException;
+import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -88,7 +89,7 @@ public class AdminServiceImpl implements AdminService {
                 saveVerificationToken(adminRequest.getUsername(), verificationToken);
 
                 String otp = otpService.generateOtpEmail(adminRequest.getEmail());
-                String verificationUrl = baseUrl + "api/v1/auth/verify-email?token=" + verificationToken;
+                String verificationUrl = baseUrl + "api/v1/admin/verify-email?token=" + verificationToken;
                 emailService.sendVerificationEmail(adminRequest.getEmail(), verificationUrl, otp);
             }
         }
@@ -171,6 +172,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public boolean verifyEmailToken(String token) {
         Optional<VerificationToken> optionalToken = tokenRepository.findByToken(token);
         if (optionalToken.isPresent()) {
@@ -262,5 +264,40 @@ public class AdminServiceImpl implements AdminService {
         newAdmin = adminrepository.save(newAdmin);
         log.info("Successfully created new Google admin with ID: {}", newAdmin.getId());
         return newAdmin;
+    }    @Override
+    public void sendPasswordResetEmail(String email) throws MessagingException, UnsupportedEncodingException {
+        log.info("Sending password reset email to: {}", email);
+        Admin admin = adminrepository.findUserByEmail(email);
+        if (admin == null) {
+            throw new NotFoundExceptionClass("User not found with email: " + email);
+        }
+        
+        // Generate password reset token (using UUID)
+        String resetToken = UUID.randomUUID().toString();
+        
+        // Save verification token (reusing the verification token table)
+        saveVerificationToken(admin.getUsername(), resetToken);
+        
+        // Create password reset URL
+        String resetUrl = baseUrl + "api/v1/admin/verify-email-forget-password?token=" + resetToken;
+        
+        // Send password reset email
+        emailService.sendPasswordResetEmail(email, resetUrl);
+        log.info("Password reset email sent successfully to: {}", email);
+    }
+
+    @Override
+    @Transactional
+    public boolean verifyPasswordResetToken(String token) {
+        log.info("Verifying password reset token: {}", token);
+        Optional<VerificationToken> optionalToken = tokenRepository.findByToken(token);
+        if (optionalToken.isPresent()) {
+            VerificationToken verificationToken = optionalToken.get();
+            // Don't delete the token yet - we'll delete it after password is changed
+            log.info("Password reset token verified successfully");
+            return true;
+        }
+        log.warn("Invalid password reset token: {}", token);
+        return false;
     }
 }

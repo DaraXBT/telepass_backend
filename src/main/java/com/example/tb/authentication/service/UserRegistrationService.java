@@ -61,9 +61,7 @@ public class UserRegistrationService {
 
         // Convert to Base64
         return Base64.getEncoder().encodeToString(outputStream.toByteArray());
-    }
-
-    // Generate QR Code with eventId, userId, and registrationToken
+    }    // Generate QR Code with eventId, userId, and registrationToken
     public String generateQRCode(String eventId, String userId, String registrationToken) throws Exception {
         String qrCodeData = eventId + "|" + userId + "|" + registrationToken;
 
@@ -71,8 +69,8 @@ public class UserRegistrationService {
         BitMatrix matrix = new MultiFormatWriter().encode(
                 qrCodeData,
                 BarcodeFormat.QR_CODE,
-                300,
-                300);
+                500,
+                500);
 
         // Convert to image
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -93,16 +91,15 @@ public class UserRegistrationService {
         }
         
         // Generate unique filename
-        String fileName = "user_" + userId + "_" + UUID.randomUUID().toString() + ".png";
-        String filePath = "qrcode/" + fileName;
+        String fileName = "user_" + userId + "_" + UUID.randomUUID().toString() + ".png";        String filePath = "qrcode/" + fileName;
         String fullPath = "src/main/resources/" + filePath;
         
         // Generate QR Code
         BitMatrix matrix = new MultiFormatWriter().encode(
                 qrCodeData,
                 BarcodeFormat.QR_CODE,
-                300,
-                300);
+                500,
+                500);
 
         // Save to file
         File qrFile = new File(fullPath);

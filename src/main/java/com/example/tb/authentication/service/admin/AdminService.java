@@ -23,4 +23,8 @@ public interface AdminService extends UserDetailsService {
     Admin findByGoogleIdOrEmail(String googleId, String email);
     Admin registerGoogleAdmin(AdminRequest adminRequest) throws MessagingException, UnsupportedEncodingException;
 
+    // Password reset methods
+    void sendPasswordResetEmail(String email) throws MessagingException, UnsupportedEncodingException;
+    boolean verifyPasswordResetToken(String token);
+    
 }

@@ -80,10 +80,8 @@ public class Admin implements UserDetails {    @Id
     @Override
     public boolean isCredentialsNonExpired() {
         return true;
-    }
-
-    @Override
+    }    @Override
     public boolean isEnabled() {
-        return true;
+        return enabled;
     }
 }

@@ -18,5 +18,7 @@ public interface AudienceService {
 
     VerificationResponseDTO verifyRegistration(UUID eventId, UUID userId);
 
+    VerificationResponseDTO verifyCheckIn(UUID eventId, UUID userId, String registrationToken);
+
     Resource getQRCodeImage(String fileName) throws IOException;
 }

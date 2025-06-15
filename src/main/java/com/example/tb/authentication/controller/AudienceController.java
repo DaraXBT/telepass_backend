@@ -20,6 +20,7 @@ import com.example.tb.model.dto.UserDTO;
 import com.example.tb.model.dto.VerificationResponseDTO;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @RequestMapping("/api/v1/audiences")
@@ -54,6 +55,18 @@ public class AudienceController {
             @RequestParam UUID eventId,
             @RequestParam UUID userId) {
         return ResponseEntity.ok(audienceService.verifyRegistration(eventId, userId));
+    }    /**
+     * Public endpoint for Telegram bot check-in verification
+     * This endpoint doesn't require authentication and is specifically for the bot
+     */
+    @Operation(summary = "Verify and check-in user via Telegram bot", 
+               description = "Public endpoint for Telegram bot to verify user registration and perform check-in")
+    @PostMapping("/verify-checkin")
+    public ResponseEntity<VerificationResponseDTO> verifyCheckIn(
+            @RequestParam UUID eventId,
+            @RequestParam UUID userId,
+            @RequestParam String registrationToken) {
+        return ResponseEntity.ok(audienceService.verifyCheckIn(eventId, userId, registrationToken));
     }
 
     @GetMapping("/qrcode")

@@ -93,6 +93,41 @@ public class AudienceServiceImpl implements AudienceService {
         return new ByteArrayResource(fileBytes);
     }
 
+    @Override
+    @Transactional
+    public VerificationResponseDTO verifyCheckIn(UUID eventId, UUID userId, String registrationToken) {
+        if (!eventRepository.existsById(eventId)) {
+            return new VerificationResponseDTO(false, "Event not found", null);
+        }
+
+        User user = audienceRepository.findById(userId)
+                .orElse(null);
+
+        if (user == null) {
+            return new VerificationResponseDTO(false, "User not found", null);
+        }
+
+        // Verify registration token for security
+        if (!registrationToken.equals(user.getRegistrationToken())) {
+            return new VerificationResponseDTO(false, "Invalid registration token", null);
+        }
+
+        boolean isRegistered = audienceRepository.existsByEventIdAndUserId(eventId, userId);
+        if (!isRegistered) {
+            return new VerificationResponseDTO(false, "User is not registered for this event", convertToDTO(user));
+        }
+
+        if (user.isCheckedIn()) {
+            return new VerificationResponseDTO(false, "User already checked in for this event", convertToDTO(user));
+        }
+
+        // Mark as checked in
+        user.setCheckedIn(true);
+        audienceRepository.save(user);
+
+        return new VerificationResponseDTO(true, "Registration verified and user checked in successfully", convertToDTO(user));
+    }
+
     private UserDTO convertToDTO(User user) {
         return new UserDTO(
                 user.getId(),

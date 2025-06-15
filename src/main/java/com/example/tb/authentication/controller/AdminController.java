@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.example.tb.authentication.repository.token.TokenRepository;
+import com.example.tb.model.VerificationToken;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -56,40 +59,44 @@ public class AdminController {
     private final JwtTokenUtils jwtTokenUtils;
     private final OtpService otpService;
     private final AdminRepository adminRepository;
+    private final TokenRepository tokenRepository;
     @Value("${WebBaseUrl}")
     private String webBaseUrl;
 
     public AdminController(AdminService adminService, AuthenticationManager authenticationManager,
-            JwtTokenUtils jwtTokenUtils, OtpService otpService, AdminRepository adminRepository) {
+                           JwtTokenUtils jwtTokenUtils, OtpService otpService, AdminRepository adminRepository, TokenRepository tokenRepository) {
         this.adminService = adminService;
         this.authenticationManager = authenticationManager;
         this.jwtTokenUtils = jwtTokenUtils;
         this.otpService = otpService;
         this.adminRepository = adminRepository;
-    }
-
-    @PostMapping("/login")
+        this.tokenRepository = tokenRepository;
+    }    @PostMapping("/login")
     public ResponseEntity<?> createAuthenticationToken(@RequestBody AuthenticationRequest jwtRequest) {
         try {
-            authenticate(jwtRequest.getUsername(), jwtRequest.getPassword());// emailService.sendEmail("sovitasovita28@gmail.com",
-                                                                             // "Digital TTEST", "Welcome test");
+            // First check if admin exists and is enabled
+            Admin admin = adminRepository.findByUsernameReturnAuth(jwtRequest.getUsername());
+            if (admin != null && !admin.isEnabled()) {
+                throw new IllegalArgumentException("Account not yet verified. Please check your email for verification instructions.");
+            }
+            
+            authenticate(jwtRequest.getUsername(), jwtRequest.getPassword());
         } catch (Exception e) {
-            // e.printStackTrace();
-            throw new IllegalArgumentException("Invalid username or password");
+            log.error("Login failed for username: {}, reason: {}", jwtRequest.getUsername(), e.getMessage());
+            throw new IllegalArgumentException(e.getMessage().contains("Account not yet verified") ? 
+                e.getMessage() : "Invalid username or password");
         }
 
         final UserDetails userDetails = adminService.loadUserByUsername(jwtRequest.getUsername());
         final String token = jwtTokenUtils.generateToken(userDetails);
         return ResponseEntity.ok(new JwtResponse(LocalDateTime.now(), jwtRequest.getUsername(), token));
-    }
-
-    private void authenticate(String username, String password) throws Exception {
+    }    private void authenticate(String username, String password) throws Exception {
         try {
             authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
         } catch (DisabledException e) {
-            throw new Exception("USER_DISABLED", e);
+            throw new Exception("Account not yet verified. Please check your email for verification instructions.", e);
         } catch (BadCredentialsException e) {
-            throw new Exception("INVALID_CREDENTIALS", e);
+            throw new Exception("Invalid username or password", e);
         }
     }
 
@@ -420,6 +427,97 @@ public class AdminController {
         } else {
             throw new IllegalArgumentException("Invalid OTP code");
         }
+    }
+
+    @PostMapping("/check-verification-status")
+    @Operation(summary = "Check admin verification status")
+    public ResponseEntity<ApiResponse<?>> checkVerificationStatus(@RequestParam String email) {
+        log.info("Checking verification status for email: {}", email);
+        Admin admin = adminRepository.findUserByEmail(email);
+        if (admin != null) {
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("email", email);
+            responseData.put("username", admin.getUsername());
+            responseData.put("isVerified", admin.isEnabled());
+            responseData.put("isGoogleAccount", admin.isGoogleAccount());
+            
+            String message = admin.isEnabled() ? 
+                "Account is verified and can login" : 
+                "Account exists but not yet verified. Please check your email for verification instructions.";
+            
+            return ResponseEntity.ok(ApiResponse.builder()
+                    .payload(responseData)
+                    .message(message)
+                    .date(LocalDateTime.now())
+                    .build());
+        } else {
+            return ResponseEntity.status(404).body(ApiResponse.builder()
+                    .message("No account found with this email address")
+                    .date(LocalDateTime.now())
+                    .build());
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Send password reset email")
+    public ApiResponse<?> forgotPassword(@RequestParam String email)
+            throws MessagingException, UnsupportedEncodingException {
+        log.info("Forgot password request for email: {}", email);
+        adminService.sendPasswordResetEmail(email);
+        return ApiResponse.builder()
+                .date(LocalDateTime.now())
+                .message("Password reset link sent to your email successfully")
+                .build();
+    }
+
+    @GetMapping("/verify-email-forget-password")
+    @Operation(summary = "Verify password reset token and redirect to change password page")
+    public void verifyPasswordResetToken(@RequestParam("token") String token, HttpServletResponse response) throws IOException {
+        log.info("Verifying password reset token: {}", token);
+        boolean isVerified = adminService.verifyPasswordResetToken(token);
+        if (isVerified) {
+            log.info("Password reset token verified, redirecting to change password page");
+            response.sendRedirect(webBaseUrl + "reset-password?token=" + token);
+        } else {
+            log.warn("Invalid password reset token, redirecting to invalid token page");
+            response.sendRedirect(webBaseUrl + "invalid-token");
+        }
+    }
+
+    @PostMapping("/change-password-with-token")
+    @Operation(summary = "Change password using reset token")
+    @Transactional
+    public ApiResponse<?> changePasswordWithToken(@RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        String newPassword = request.get("newPassword");
+        
+        log.info("Password change attempt with token");
+        
+        // Verify token first
+        boolean isValid = adminService.verifyPasswordResetToken(token);
+        if (!isValid) {
+            throw new IllegalArgumentException("Invalid or expired reset token");
+        }
+        
+        // Find admin associated with this token
+        Optional<VerificationToken> optionalToken = tokenRepository.findByToken(token);
+        if (!optionalToken.isPresent()) {
+            throw new IllegalArgumentException("Invalid reset token");
+        }
+        
+        VerificationToken verificationToken = optionalToken.get();
+        Admin admin = verificationToken.getAdmin();
+        
+        // Update password using admin service (this will handle encoding)
+        adminService.resetPassword(admin.getEmail(), newPassword);
+        
+        // Delete the verification token after successful password change
+        tokenRepository.delete(verificationToken);
+        
+        return ApiResponse.builder()
+                .date(LocalDateTime.now())
+                .message("Password changed successfully")
+                .build();
     }
 
     // DEBUG ENDPOINT - REMOVE IN PRODUCTION

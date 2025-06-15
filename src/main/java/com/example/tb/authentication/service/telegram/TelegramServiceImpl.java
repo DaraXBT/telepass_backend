@@ -32,6 +32,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import com.example.tb.authentication.service.UserRegistrationService;
+import com.example.tb.authentication.service.email.EmailService;
 import com.example.tb.authentication.service.event.EventService;
 import com.example.tb.model.dto.VerificationResponseDTO;
 import com.example.tb.model.entity.Event;
@@ -50,7 +51,7 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
     private static final Logger logger = LoggerFactory.getLogger(TelegramServiceImpl.class);
     public static final String botToken = "7604740715:AAGnrNxu0hnnJ8JdtEBin1R3S_yE6GiHGHI";
     public static final String botUsername = "telepasskhbot";
-    private static final long ADMIN_CHAT_ID = 1238939350;
+    private static final List<Long> ADMIN_CHAT_IDS = List.of(649084122L);
     private boolean awaitingQrUpload = false;
 
     public TelegramServiceImpl() {
@@ -70,15 +71,15 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
     @Autowired
     private EventService eventService;
     @Autowired
+    private EmailService emailService;
+    @Autowired
     private com.example.tb.authentication.repository.admin.AdminRepository adminRepository;
     private Map<Long, RegistrationContext> registrationContexts = new ConcurrentHashMap<>();    @Override
     public void onUpdateReceived(Update update) {
         try {
             if (update.hasMessage()) {
-                long chatId = update.getMessage().getChatId();
-
-                // --- ADMIN SCAN FEATURE ---
-                if (chatId == ADMIN_CHAT_ID) {
+                long chatId = update.getMessage().getChatId();                // --- ADMIN SCAN FEATURE ---
+                if (isAdmin(chatId)) {
                     // Handle QR image upload (must check for photo first!)
                     if (awaitingQrUpload && update.getMessage().hasPhoto()) {
                         awaitingQrUpload = false;
@@ -87,14 +88,35 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                         handleQrImage(chatId, fileId);
                         return;
                     }
-                    // Handle /scan command
-                    if (update.getMessage().hasText() && update.getMessage().getText().equals("/scan")) {
-                        awaitingQrUpload = true;
-                        sendMessage(chatId, "🖼️ Please upload the user's registration QR code image.");
-                        return;
+                    // Handle admin commands
+                    if (update.getMessage().hasText()) {
+                        String messageText = update.getMessage().getText();
+                        
+                        if (messageText.equals("/scan")) {
+                            awaitingQrUpload = true;
+                            sendMessage(chatId, """
+                                � **QR CODE SCANNER ACTIVATED**
+                                
+                                📱 Please upload the user's registration QR code image to verify and check them in.
+                                
+                                ℹ️ **Instructions:**
+                                • Take a clear photo of the QR code
+                                • Send the image to this chat
+                                • I'll automatically verify and check in the user
+                                
+                                ⚠️ **Note:** Only registered users can be checked in once per event.""");
+                            return;
+                        } else if (messageText.equals("/help_admin")) {
+                            sendAdminHelpMessage(chatId);
+                            return;
+                        } else if (messageText.equals("/cancel")) {
+                            awaitingQrUpload = false;
+                            sendMessage(chatId, "❌ QR scan cancelled. Use /scan to start again.");
+                            return;
+                        }
                     }
                 } else if (update.getMessage().hasText() && update.getMessage().getText().equals("/scan")) {
-                    sendMessage(chatId, "❌ You do not have permission to use this command.");
+                    sendMessage(chatId, "❌ **Access Denied**\n\nYou do not have permission to use the admin scanning feature.");
                     return;
                 }
 
@@ -271,6 +293,11 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                     if (isValidOccupation(messageText)) {
                         context.getUser().setOccupation(messageText);
 
+                        // Send processing message to user
+                        sendMessage(chatId, "⏳ កំពុងដំណើរការចុះឈ្មោះ...\n" +
+                                "📧 កំពុងបង្កើត QR Code និងផ្ញើអ៊ីមែល\n" +
+                                "សូមរង់ចាំមួយភ្លែត...");
+
                         // Complete registration
                         User registeredUser = userRegistrationService.registerUser(context.getUser());
 
@@ -285,13 +312,40 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                                 registeredUser.getId().toString(),
                                 registeredUser.getRegistrationToken());                        // Update user with QR code file path
                         registeredUser.setQrCode(qrCodeFilePath);
-                        userRegistrationService.updateUser(registeredUser);
-
-                        // Generate Base64 QR Code for Telegram
+                        userRegistrationService.updateUser(registeredUser);                        // Generate Base64 QR Code for Telegram
                         String qrCodeBase64 = userRegistrationService.generateQRCode(
                                 context.getEventId().toString(),
                                 registeredUser.getId().toString(),
                                 registeredUser.getRegistrationToken());
+
+                        // Send QR code to user's email
+                        try {
+                            Optional<EventResponse> eventOpt = eventService.getEventById(context.getEventId());
+                            if (eventOpt.isPresent()) {
+                                EventResponse event = eventOpt.get();
+                                  // Convert base64 to byte array for email attachment
+                                byte[] qrCodeBytes = Base64.getDecoder().decode(qrCodeBase64);                                emailService.sendQRCodeEmail(
+                                    registeredUser.getEmail(),
+                                    registeredUser.getFullName(),
+                                    event,
+                                    qrCodeBytes
+                                );
+                                
+                                logger.info("QR code email sent successfully to: {}", registeredUser.getEmail());
+                                
+                                // Send confirmation that email was sent
+                                sendMessage(chatId, "✅ អ៊ីមែលត្រូវបានផ្ញើជោគជ័យ!\n" +
+                                        "📧 សូមពិនិត្យអ៊ីមែលរបស់អ្នកសម្រាប់ QR Code");
+                            } else {
+                                logger.warn("Event not found for QR code email: {}", context.getEventId());
+                                sendMessage(chatId, "⚠️ មិនអាចផ្ញើអ៊ីមែលបាន តែការចុះឈ្មោះបានជោគជ័យ");
+                            }
+                        } catch (Exception e) {
+                            logger.error("Failed to send QR code email to {}: {}", registeredUser.getEmail(), e.getMessage(), e);
+                            // Continue with registration even if email fails
+                            sendMessage(chatId, "⚠️ មិនអាចផ្ញើអ៊ីមែលបាន តែការចុះឈ្មោះបានជោគជ័យ\n" +
+                                    "QR Code នឹងត្រូវបានផ្ញើនៅទីនេះ");
+                        }
 
                         // Send QR Code and completion message
                         sendQRCodeAndCompleteRegistration(chatId, qrCodeBase64);
@@ -313,9 +367,7 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
             sendMessage(chatId, "⚠️ មានកំហុសក្នុងការចុះឈ្មោះ។ សូមព្យាយាមម្តងទៀត។\n" +
                     "ឬស្កេន QR Code ម្តងទៀតដើម្បីចាប់ផ្តើមការចុះឈ្មោះ។");
         }
-    }
-
-    private void sendQRCodeAndCompleteRegistration(long chatId, String qrCodeBase64) throws TelegramApiException {
+    }    private void sendQRCodeAndCompleteRegistration(long chatId, String qrCodeBase64) throws TelegramApiException {
         // Decode Base64 QR Code
         byte[] qrCodeBytes = Base64.getDecoder().decode(qrCodeBase64);
 
@@ -323,8 +375,14 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
         SendPhoto sendPhoto = new SendPhoto();
         sendPhoto.setChatId(chatId);
         sendPhoto.setPhoto(new InputFile(new ByteArrayInputStream(qrCodeBytes), "registration_qr.png"));
-        sendPhoto.setCaption("✅ ការចុះឈ្មោះបានជោគជ័យ!\n" +
-                "\uD83D\uDD14 សូមរក្សាទុក QR Code នេះសម្រាប់ការចូលរួមព្រឹត្តិការណ៍។");
+        sendPhoto.setCaption("🎉 ការចុះឈ្មោះបានបញ្ចប់ដោយជោគជ័យ!\n\n" +
+                "📱 នេះគឺជា QR Code របស់អ្នក\n" +
+                "📧 QR Code ក៏ត្រូវបានផ្ញើទៅអ៊ីមែលរបស់អ្នកដែរ\n\n" +
+                "📋 សូមចងចាំ:\n" +
+                "• រក្សាទុក QR Code នេះ\n" +
+                "• យកមកបង្ហាញនៅច្រកចូលព្រឹត្តិការណ៍\n" +
+                "• មកដល់មុនម៉ោង 15-30 នាទី\n\n" +
+                "🙏 អរគុណសម្រាប់ការចុះឈ្មោះ!");
 
         // Send the QR code
         execute(sendPhoto);
@@ -558,10 +616,11 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             logger.error("Error sending message", e);
         }
-    }
-
-    private void handleQrImage(long chatId, String fileId) {
+    }    private void handleQrImage(long chatId, String fileId) {
         try {
+            // Send processing message
+            sendMessage(chatId, "🔄 Processing QR code...");
+
             // Download the file from Telegram
             GetFile getFile = new GetFile();
             getFile.setFileId(fileId);
@@ -577,57 +636,189 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
             Result result = new MultiFormatReader().decode(bitmap);
             String qrContent = result.getText();
 
+            logger.info("QR Code content decoded: {}", qrContent);
+
             // Parse QR content: eventId|userId|registrationToken
             String[] parts = qrContent.split("\\|");
             if (parts.length != 3) {
-                sendMessage(chatId, "❌ Invalid QR code format.");
+                sendMessage(chatId, "❌ Invalid QR code format. Expected format: eventId|userId|token");
                 return;
             }
             String eventId = parts[0];
             String userId = parts[1];
-            String registrationToken = parts[2];
+            String registrationToken = parts[2];            logger.info("Verifying user check-in - EventID: {}, UserID: {}", eventId, userId);
 
-            // Call backend verification endpoint (example using RestTemplate)
-            String url = String.format("http://localhost:8080/api/v1/audiences/verify?eventId=%s&userId=%s", eventId,
-                    userId);
+            // Call backend verification/check-in endpoint (public endpoint)
+            String url = String.format("http://localhost:8080/api/v1/audiences/verify-checkin?eventId=%s&userId=%s&registrationToken=%s", 
+                                     eventId, userId, registrationToken);
             RestTemplate restTemplate = new RestTemplate();
             VerificationResponseDTO response = restTemplate.postForObject(url, null, VerificationResponseDTO.class);
 
-            if (response != null && response.isVerified() && response.getUser() != null
-                    && registrationToken.equals(response.getUser().getRegistrationToken())) {
-                sendMessage(chatId, "✅ Verified!\n" + formatUserInfo(response.getUser()));
-            } else if (response != null && response.getMessage() != null
-                    && response.getMessage().contains("already checked in")) {
-                sendMessage(chatId,
-                        "⚠️ This QR code has already been used for check-in.\n" + formatUserInfo(response.getUser()));
-            } else {
-                sendMessage(chatId, "❌ Not valid or registration token mismatch.");
-            }
+            // Process the verification response
+            processCheckInResponse(chatId, response, registrationToken, eventId, userId);
+
         } catch (Exception e) {
+            logger.error("QR scan error for chatId {}: {}", chatId, e.getMessage(), e);
             sendMessage(chatId, "❌ Failed to process QR code: " + e.getMessage());
-            logger.error("QR scan error", e);
         }
     }
 
-    private String formatUserInfo(com.example.tb.model.dto.UserDTO user) {
+    /**
+     * Process the check-in response and send appropriate message to admin
+     */
+    private void processCheckInResponse(long chatId, VerificationResponseDTO response, String registrationToken, String eventId, String userId) {
+        try {
+            if (response == null) {
+                sendMessage(chatId, "❌ No response from verification service. Please try again.");
+                return;
+            }            // Verify registration token matches (this is now handled by the backend)
+            if (response.isVerified()) {
+                // Successful check-in
+                String successMessage = String.format("""
+                    ✅ **CHECK-IN SUCCESSFUL!**
+                    
+                    🎯 Event verified and user checked in
+                    
+                    👤 **User Details:**
+                    %s
+                    
+                    📋 **Verification Info:**
+                    • Event ID: %s
+                    • User ID: %s
+                    • Status: First-time check-in
+                    • Time: %s
+                    
+                    🎉 Welcome to the event!""", 
+                    formatUserInfo(response.getUser()), 
+                    eventId, 
+                    userId, 
+                    java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
+                
+                sendMessage(chatId, successMessage);
+                logger.info("Successful check-in for user {} at event {}", userId, eventId);
+
+            } else if (response.getMessage() != null) {
+                // Handle specific error cases
+                if (response.getMessage().contains("already checked in")) {
+                    String alreadyCheckedMessage = String.format("""
+                        ⚠️ **ALREADY CHECKED IN**
+                        
+                        This user has already been checked in for this event.
+                        
+                        👤 **User Details:**
+                        %s
+                        
+                        📋 **Status:** Previously verified
+                        • Event ID: %s
+                        • User ID: %s""", 
+                        formatUserInfo(response.getUser()), 
+                        eventId, 
+                        userId);
+                    
+                    sendMessage(chatId, alreadyCheckedMessage);
+                    logger.info("User {} already checked in for event {}", userId, eventId);
+
+                } else if (response.getMessage().contains("not registered")) {
+                    sendMessage(chatId, String.format("""
+                        ❌ **NOT REGISTERED**
+                        
+                        This user is not registered for this event.
+                        
+                        📋 **Details:**
+                        • Event ID: %s
+                        • User ID: %s
+                        
+                        Please ensure the user has registered for the correct event.""", 
+                        eventId, userId));
+                    logger.warn("User {} not registered for event {}", userId, eventId);
+
+                } else if (response.getMessage().contains("Event not found")) {
+                    sendMessage(chatId, String.format("""
+                        ❌ **EVENT NOT FOUND**
+                        
+                        The event in this QR code does not exist.
+                        
+                        📋 **Details:**
+                        • Event ID: %s
+                        
+                        Please check if the QR code is valid.""", eventId));
+                    logger.warn("Event not found: {}", eventId);
+
+                } else if (response.getMessage().contains("User not found")) {
+                    sendMessage(chatId, String.format("""
+                        ❌ **USER NOT FOUND**
+                        
+                        The user in this QR code does not exist.
+                        
+                        📋 **Details:**
+                        • User ID: %s
+                        
+                        Please check if the QR code is valid.""", userId));
+                    logger.warn("User not found: {}", userId);                } else if (response.getMessage().contains("Invalid registration token")) {
+                    sendMessage(chatId, String.format("""
+                        ❌ **INVALID QR CODE**
+                        
+                        The registration token in this QR code does not match our records.
+                        This could indicate:
+                        • QR code has been tampered with
+                        • QR code is from a different system
+                        • QR code has expired
+                        
+                        📋 **Details:**
+                        • Event ID: %s
+                        • User ID: %s
+                        
+                        Please ensure you're scanning a valid QR code.""", eventId, userId));
+                    logger.warn("Invalid registration token for user {} at event {}", userId, eventId);
+
+                } else {
+                    sendMessage(chatId, "❌ Verification failed: " + response.getMessage());
+                    logger.warn("Verification failed for user {} at event {}: {}", userId, eventId, response.getMessage());
+                }
+
+            } else {
+                sendMessage(chatId, String.format("""
+                    ❌ **VERIFICATION FAILED**
+                    
+                    Unable to verify this QR code.
+                    
+                    📋 **Details:**
+                    • Event ID: %s
+                    • User ID: %s
+                    • Response: %s
+                    
+                    Please try scanning again or contact support.""", 
+                    eventId, userId, response.getMessage() != null ? response.getMessage() : "Unknown error"));
+                logger.error("Unexpected verification response for user {} at event {}: {}", userId, eventId, response);
+            }
+
+        } catch (Exception e) {
+            logger.error("Error processing check-in response: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ Error processing check-in. Please try again.");
+        }
+    }    private String formatUserInfo(com.example.tb.model.dto.UserDTO user) {
         if (user == null)
             return "User info not available.";
-        return String.format(
-                "Full Name: %s\n" +
-                        "Phone: %s\n" +
-                        "Gender: %s\n" +
-                        "Date of Birth: %s\n" +
-                        "Address: %s\n" +
-                        "Email: %s\n" +
-                        "Occupation: %s",
-                user.getFullName(),
-                user.getPhoneNumber(),
-                user.getGender(),
-                user.getDateOfBirth(),
-                user.getAddress(),
-                user.getEmail(),
-                user.getOccupation());
-    }    /**
+        
+        return String.format("""
+                📋 **Personal Information:**
+                👤 **Name:** %s
+                📞 **Phone:** %s
+                ⚧️ **Gender:** %s
+                🎂 **Date of Birth:** %s
+                🏠 **Address:** %s
+                📧 **Email:** %s
+                💼 **Occupation:** %s
+                🆔 **User ID:** %s""",
+                user.getFullName() != null ? user.getFullName() : "N/A",
+                user.getPhoneNumber() != null ? user.getPhoneNumber() : "N/A",
+                user.getGender() != null ? user.getGender().toString() : "N/A",
+                user.getDateOfBirth() != null ? user.getDateOfBirth().toString() : "N/A",
+                user.getAddress() != null ? user.getAddress() : "N/A",
+                user.getEmail() != null ? user.getEmail() : "N/A",
+                user.getOccupation() != null ? user.getOccupation() : "N/A",
+                user.getId() != null ? user.getId().toString() : "N/A");
+    }/**
      * Formats event datetime information for display in welcome message
      */
     private String formatEventDateTime(EventResponse event) {
@@ -753,6 +944,48 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
             logger.error("Invalid coordinate format: " + coordinates, e);
             sendMessage(chatId, "📍 ទីតាំង: " + coordinates);
         }
+    }
+
+    private void sendAdminHelpMessage(long chatId) {
+        String helpMessage = """
+                🔧 **ADMIN COMMANDS**
+                
+                Available commands for event administrators:
+                
+                🔍 **/scan** - Start QR code scanning mode
+                   • Activate scanner and upload user QR codes
+                   • Automatically verify and check in users
+                   • Only works once per user per event
+                
+                ❌ **/cancel** - Cancel current QR scanning mode
+                   • Stop waiting for QR code upload
+                   • Return to normal command mode
+                
+                ℹ️ **/help_admin** - Show this help message
+                   • Display all available admin commands
+                
+                📋 **How to use QR Scanner:**
+                1. Send /scan command
+                2. Take a clear photo of the user's QR code
+                3. Send the image to this chat
+                4. Bot will verify and check in the user automatically
+                
+                ⚠️ **Important Notes:**
+                • Users can only be checked in once per event
+                • QR codes must be from registered users
+                • Invalid or tampered QR codes will be rejected
+                • All check-in activities are logged
+                
+                📞 **Support:** Contact system administrator if you encounter issues.""";
+
+        sendMessage(chatId, helpMessage);
+    }
+
+    /**
+     * Check if the given chat ID belongs to an admin
+     */
+    private boolean isAdmin(long chatId) {
+        return ADMIN_CHAT_IDS.contains(chatId);
     }
 
 }

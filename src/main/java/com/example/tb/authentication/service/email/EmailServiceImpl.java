@@ -1,6 +1,7 @@
 package com.example.tb.authentication.service.email;
 
 import com.example.tb.configuration.OtpConfig;
+import com.example.tb.model.response.EventResponse;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.core.io.ByteArrayResource;
 
 import java.io.UnsupportedEncodingException;
 
@@ -103,6 +105,221 @@ public class EmailServiceImpl implements EmailService {
             log.info("OTP email sent successfully to: {}", email);
         } catch (Exception e) {
             log.error("Failed to send OTP email to: {}", email, e);
+            throw e;
+        }
+    }
+
+    @Override
+    public void sendPasswordResetEmail(String email, String resetUrl) throws MessagingException, UnsupportedEncodingException {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromAddress, fromName);
+            helper.setTo(email);
+            helper.setSubject("Password Reset - Telepass");
+            
+            String content = String.format(
+                "Dear User,\n\n" +
+                "You have requested to reset your password for your Telepass account.\n\n" +
+                "Click the following link to reset your password:\n%s\n\n" +
+                "This link will expire in 24 hours for security reasons.\n\n" +
+                "If you did not request this password reset, please ignore this email and your password will remain unchanged.\n\n" +
+                "For security reasons, please do not share this link with anyone.\n\n" +
+                "Best regards,\nTelepass Team",
+                resetUrl
+            );
+            
+            helper.setText(content);
+            mailSender.send(message);
+            
+            log.info("Password reset email sent successfully to: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send password reset email to: {}", email, e);
+            throw e;
+        }
+    }    @Override
+    public void sendQRCodeEmail(String email, String userName, EventResponse event, byte[] qrCodeBytes) throws MessagingException, UnsupportedEncodingException {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromAddress, fromName);
+            helper.setTo(email);
+            helper.setSubject("Event Registration QR Code - Telepass");
+            
+            // Format datetime strings
+            String startDateTimeStr = event.getStartDateTime() != null 
+                ? event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMM dd, yyyy 'at' hh:mm a"))
+                : "To be announced";
+            String endDateTimeStr = event.getEndDateTime() != null 
+                ? event.getEndDateTime().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMM dd, yyyy 'at' hh:mm a"))
+                : "To be announced";
+            
+            // Format location
+            String locationDisplay = "";
+            if (event.getLocation() != null && !event.getLocation().trim().isEmpty()) {
+                String location = event.getLocation().trim();
+                if (location.startsWith("http://") || location.startsWith("https://")) {
+                    locationDisplay = String.format("<a href=\"%s\" style=\"color: #3498db; text-decoration: none;\">📍 View on Map</a>", location);
+                } else {
+                    locationDisplay = "📍 " + location;
+                }
+            } else {
+                locationDisplay = "📍 To be announced";
+            }
+            
+            // Create HTML content with comprehensive event details
+            String htmlContent = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Event Registration QR Code</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f4f4f4;">
+                    <div style="background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                        <!-- Header -->
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="color: #2c3e50; margin-bottom: 10px;">🎉 Registration Successful!</h1>
+                            <h2 style="color: #34495e; font-weight: normal; margin-bottom: 5px;">%s</h2>
+                            <div style="background-color: #3498db; color: white; padding: 8px 16px; border-radius: 20px; display: inline-block; font-size: 14px; font-weight: bold;">
+                                %s
+                            </div>
+                        </div>
+                        
+                        <!-- User Greeting -->
+                        <div style="text-align: center; margin: 30px 0;">
+                            <p style="font-size: 18px; color: #2c3e50; margin-bottom: 15px;">
+                                <strong>Dear %s,</strong>
+                            </p>
+                            <p style="font-size: 16px; color: #555; margin-bottom: 20px;">
+                                Congratulations! You have successfully registered for this amazing event. 
+                                Below is your personal QR code and complete event information.
+                            </p>
+                        </div>
+                        
+                        <!-- Event Details Section -->
+                        <div style="background-color: #f8f9fa; padding: 25px; border-radius: 10px; margin: 30px 0; border-left: 5px solid #3498db;">
+                            <h3 style="color: #2c3e50; margin-top: 0; margin-bottom: 20px;">📋 Event Details</h3>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <strong style="color: #34495e;">📝 Description:</strong>
+                                <p style="margin: 5px 0; color: #555; font-style: italic;">%s</p>
+                            </div>
+                            
+                            <div style="display: table; width: 100%%; margin-bottom: 15px;">
+                                <div style="display: table-row;">
+                                    <div style="display: table-cell; width: 50%%; padding-right: 10px;">
+                                        <strong style="color: #e74c3c;">🕐 Start Time:</strong><br>
+                                        <span style="color: #555;">%s</span>
+                                    </div>
+                                    <div style="display: table-cell; width: 50%%; padding-left: 10px;">
+                                        <strong style="color: #e74c3c;">🕐 End Time:</strong><br>
+                                        <span style="color: #555;">%s</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 15px;">
+                                <strong style="color: #34495e;">📍 Location:</strong><br>
+                                <span style="color: #555;">%s</span>
+                            </div>
+                            
+                            <div style="display: table; width: 100%%;">
+                                <div style="display: table-row;">
+                                    <div style="display: table-cell; width: 50%%; padding-right: 10px;">
+                                        <strong style="color: #27ae60;">👥 Capacity:</strong><br>
+                                        <span style="color: #555;">%d people</span>
+                                    </div>
+                                    <div style="display: table-cell; width: 50%%; padding-left: 10px;">
+                                        <strong style="color: #f39c12;">✅ Registered:</strong><br>
+                                        <span style="color: #555;">%d people</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- QR Code Section -->
+                        <div style="text-align: center; margin: 40px 0; padding: 30px; background-color: #f8f9fa; border-radius: 15px; border: 3px dashed #3498db;">
+                            <p style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 20px;">
+                                📱 Your Event QR Code
+                            </p>
+                            <img src="cid:qrcode" alt="Event QR Code" 
+                                 style="width: 400px; height: 400px; border: 4px solid #3498db; border-radius: 15px; display: block; margin: 0 auto; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+                            <p style="font-size: 14px; color: #7f8c8d; margin-top: 15px; font-style: italic;">
+                                Present this QR code at the event entrance
+                            </p>
+                        </div>
+                        
+                        <!-- Instructions -->
+                        <div style="background-color: #ecf0f1; padding: 20px; border-radius: 8px; margin: 30px 0;">
+                            <h3 style="color: #e74c3c; margin-top: 0;">📋 Important Instructions:</h3>
+                            <ul style="margin: 0; padding-left: 20px;">
+                                <li style="margin-bottom: 8px;">🔒 <strong>Keep this QR code safe and accessible</strong></li>
+                                <li style="margin-bottom: 8px;">🚪 <strong>Present it at the event entrance for quick check-in</strong></li>
+                                <li style="margin-bottom: 8px;">🚫 <strong>Do not share this QR code with others</strong></li>
+                                <li style="margin-bottom: 8px;">📱 <strong>Save this image to your phone for easy access</strong></li>
+                                <li style="margin-bottom: 8px;">⏰ <strong>Arrive 15-30 minutes early for smooth check-in</strong></li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Registration Status -->
+                        <div style="text-align: center; margin: 30px 0; padding: 20px; background-color: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;">
+                            <p style="font-size: 16px; color: #155724; margin: 0; font-weight: bold;">
+                                ✅ Registration Status: <span style="color: #28a745;">CONFIRMED</span>
+                            </p>
+                            <p style="font-size: 14px; color: #155724; margin: 10px 0 0 0;">
+                                You are successfully registered for this event!
+                            </p>
+                        </div>
+                        
+                        <!-- Footer -->
+                        <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #ecf0f1;">
+                            <p style="font-size: 16px; color: #2c3e50; margin-bottom: 5px;">
+                                We look forward to seeing you at the event! 🎉
+                            </p>
+                            <p style="font-size: 14px; color: #7f8c8d;">
+                                Best regards,<br>
+                                <strong>Telepass Team</strong>
+                            </p>
+                        </div>
+                        
+                        <!-- Footer Note -->
+                        <div style="text-align: center; margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+                            <p style="font-size: 12px; color: #95a5a6; margin: 0;">
+                                This is an automated email. Please do not reply to this message.<br>
+                                For questions, please contact the event organizers.
+                            </p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """, 
+                event.getName() != null ? event.getName() : "Event",
+                event.getCategory() != null ? event.getCategory().toUpperCase() : "GENERAL",
+                userName != null ? userName : "User",
+                event.getDescription() != null ? event.getDescription() : "No description available",
+                startDateTimeStr,
+                endDateTimeStr,
+                locationDisplay,
+                event.getCapacity(),
+                event.getRegistered()
+            );
+            
+            // Set HTML content
+            helper.setText(htmlContent, true);
+            
+            // Embed QR code as inline image
+            ByteArrayResource qrCodeResource = new ByteArrayResource(qrCodeBytes);
+            helper.addInline("qrcode", qrCodeResource, "image/png");
+            
+            mailSender.send(message);
+            
+            log.info("Enhanced QR code email sent successfully to: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send QR code email to: {}", email, e);
             throw e;
         }
     }

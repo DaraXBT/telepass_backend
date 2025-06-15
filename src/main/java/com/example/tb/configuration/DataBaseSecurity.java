@@ -61,6 +61,7 @@ public class DataBaseSecurity {
                                 "/swagger-ui/**",
                                 "/swagger/ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/events", "/api/v1/events/test", "/api/v1/events/*").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/audiences/verify-checkin").permitAll() // Allow Telegram bot check-in
                         .requestMatchers(
                                 "/api/v1/events/**",
                                 "/api/v1/audiences/**"
