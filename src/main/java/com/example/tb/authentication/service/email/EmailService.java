@@ -14,4 +14,6 @@ public interface EmailService {
     void sendPasswordResetEmail(String email, String resetUrl) throws MessagingException, UnsupportedEncodingException;
 
     void sendQRCodeEmail(String email, String userName, EventResponse event, byte[] qrCodeBytes) throws MessagingException, UnsupportedEncodingException;
+    
+    void sendCheckInConfirmationEmail(String email, String userName, String eventId) throws MessagingException, UnsupportedEncodingException;
 }

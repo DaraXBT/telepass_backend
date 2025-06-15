@@ -73,7 +73,7 @@ jwt:
   refresh-token: 604800
 
 file:
-  uploadPath: C:\Users\Techo\OneDrive\Documents\Internship\YEAR5\telepass_backend\src\main\resources\files
+  uploadPath: C:\Users\Techo\OneDrive\Documents\Internship\testing\telepass_backend\src\main\resources\files
 
 file-upload:
   server-path: /home/was/bizweb_api/files

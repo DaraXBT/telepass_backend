@@ -88,4 +88,14 @@ public class EmailServiceDebugImpl implements EmailService {
         log.info("   • Enhanced instructions and styling");
         log.info("=======================================");
     }
+
+    @Override
+    public void sendCheckInConfirmationEmail(String email, String userName, String eventId) throws MessagingException, UnsupportedEncodingException {
+        log.info("=== DEBUG MODE: Check-in Confirmation Email ===");
+        log.info("To: {}", email);
+        log.info("User Name: {}", userName);
+        log.info("Event ID: {}", eventId);
+        log.info("Time: {}", java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
+        log.info("============================================");
+    }
 }

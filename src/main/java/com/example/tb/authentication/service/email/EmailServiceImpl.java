@@ -323,4 +323,87 @@ public class EmailServiceImpl implements EmailService {
             throw e;
         }
     }
+
+    @Override
+    public void sendCheckInConfirmationEmail(String email, String userName, String eventId) throws MessagingException, UnsupportedEncodingException {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromAddress, fromName);
+            helper.setTo(email);
+            helper.setSubject("✅ ការចុះឈ្មោះចូលរួមជោគជ័យ - Check-in Confirmation");
+            
+            String currentDateTime = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+            
+            String htmlContent = String.format("""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                        .success-badge { background: #28a745; color: white; padding: 10px 20px; border-radius: 25px; display: inline-block; margin: 20px 0; }
+                        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }
+                        .footer { text-align: center; margin-top: 30px; padding: 20px; color: #666; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>🎉 ចុះឈ្មោះចូលរួមជោគជ័យ!</h1>
+                            <p>Check-in Successful!</p>
+                        </div>
+                        <div class="content">
+                            <div class="success-badge">
+                                ✅ បានបញ្ជាក់ការចូលរួម
+                            </div>
+                            
+                            <div class="info-box">
+                                <h3>👤 ព័ត៌មានអ្នកចូលរួម</h3>
+                                <p><strong>ឈ្មោះ:</strong> %s</p>
+                                <p><strong>អ៊ីមែល:</strong> %s</p>
+                                <p><strong>ព្រឹត្តិការណ៍:</strong> %s</p>
+                                <p><strong>ម៉ោងចុះឈ្មោះ:</strong> %s</p>
+                            </div>
+                            
+                            <div class="info-box">
+                                <h3>📋 សេចក្តីណែនាំ</h3>
+                                <ul>
+                                    <li>អ្នកបានចុះឈ្មោះចូលរួមព្រឹត្តិការណ៍ដោយជោគជ័យ</li>
+                                    <li>សូមរក្សាទុកអ៊ីមែលនេះសម្រាប់ការយោង</li>
+                                    <li>ប្រសិនបើមានសំណួរ សូមទាក់ទងអ្នកគ្រប់គ្រង</li>
+                                </ul>
+                            </div>
+                            
+                            <p style="text-align: center; margin-top: 30px;">
+                                <strong>🎊 សូមស្វាគមន៍មកកាន់ព្រឹត្តិការណ៍!</strong>
+                            </p>
+                        </div>
+                        <div class="footer">
+                            <p>© 2025 Telepass - Event Management System</p>
+                            <p>This is an automated message. Please do not reply.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>""",
+                userName != null ? userName : "N/A",
+                email,
+                eventId,
+                currentDateTime
+            );
+            
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            
+            log.info("Check-in confirmation email sent successfully to: {}", email);
+        } catch (Exception e) {
+            log.error("Failed to send check-in confirmation email to: {}", email, e);
+            throw e;
+        }
+    }
 }
