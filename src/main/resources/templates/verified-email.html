@@ -1,44 +1,388 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body style="width: 100%; height: 100%; background-color: #f1f1f1; margin: 0; padding: 0;">
-<table style="width: 100%; height: 100%; border-collapse: collapse;">
-    <tr>
-        <td align="center" valign="middle">
-            <table style="max-width: 570px; width: 100%; background-color: white; border-radius: 15px; margin: 0;border: 3px solid #525285">
-                <tr>
-                    <td style="padding: 20px; text-align: center; border-radius: 50%;">
-                        <h1 style="font-family: 'Romnea'; font-size: 30px; padding: 0px; color: #05044F; margin: 0px;">Telepass - OTP Code</h1>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px; font-family: 'iSeth First'; font-size: 16px; color: black">
-                        <div style="background-color: #EDEDED; padding: 15px;border-radius: 5px">
-                            <p style="margin: 0 0 10px 10px;">Dear bong,</p>
-                            <p style="margin: 0 0 10px 10px; color: gray">Welcome to Deployment Platform, explore and utilize our platform to streamline your business operations globally. Thank you for joining us on this journey.</p>
-                            <p style="margin: 0 0 10px 10px; color: gray">Please verify your email by clicking the following link:</p>
-                            <p style="text-align: center; font-size: 27px; font-family: Romnea; padding: 10px; margin: 10px;">
-                                <span style="border-radius: 4px; padding: 5px 10px; color: blue ;font-weight: bold" th:text="${verificationUrl}">{{verificationUrl}}</span>
-                            </p>
-                            <p style="margin: 0 0 10px 10px; color: gray">Or verified by OTP code:</p>
-                            <p style="text-align: center; font-size: 27px; font-family: Romnea; padding: 10px; margin: 10px;">
-                                <span style="border-radius: 4px; padding: 5px 10px; color: blue ;font-weight: bold" th:text="${otp}">{{otp}}</span>
-                            </p>
-                            <p style="margin: 0 0 10px 10px; color: gray">If you did not attempt to register on our website, please disregard this email. Rest assured that no further action is required on your part.</p>
-                            <p style="margin: 0 0 10px 10px; color: gray">Should you encounter any issues or have any questions regarding your account or our platform, please don't hesitate to reach out to our dedicated support team at https://haha.kompinpekygng.site/. We are here to assist you.</p>
-                            <p style="margin: 0 0 10px 10px; color: gray">Thank you once again for choosing Gigi Deployment. We look forward to providing you with a seamless Gigi - Deployment Platform experience!</p>
-                            <br>
-                            <p style="margin: 0 0 10px 10px;color: gray">Best regards,</p>
-                            <p style="margin: 0 0 10px 10px;color: gray">Gigi - Team</p>
-                        </div>
-                    </td>
-                </tr>
-            </table>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email Verification - Te\ePass</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        line-height: 1.6;
+        color: #333333;
+        background-color: #f8f9fa;
+      }
+
+      .email-container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 40px 30px;
+        text-align: center;
+        color: white;
+      }
+
+      .logo {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        letter-spacing: -0.5px;
+      }
+
+      .tagline {
+        font-size: 16px;
+        opacity: 0.9;
+        font-weight: 300;
+      }
+
+      .content {
+        padding: 40px 30px;
+      }
+      .icon-container {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+        display: inline-block;
+      }
+
+      .title {
+        font-size: 28px;
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+
+      .welcome-message {
+        font-size: 18px;
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 15px;
+        font-weight: 500;
+      }
+
+      .message {
+        font-size: 16px;
+        color: #666666;
+        margin-bottom: 30px;
+        text-align: center;
+        line-height: 1.7;
+      }
+
+      .verification-methods {
+        background-color: #f8f9fa;
+        border-radius: 12px;
+        padding: 30px;
+        margin: 30px 0;
+      }
+
+      .method-title {
+        font-size: 18px;
+        color: #2c3e50;
+        font-weight: 600;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+
+      .method-option {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: white;
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+        transition: border-color 0.3s ease;
+      }
+
+      .method-option:hover {
+        border-color: #667eea;
+      }
+
+      .method-label {
+        font-size: 16px;
+        color: #2c3e50;
+        font-weight: 600;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+      }
+
+      .method-label .emoji {
+        margin-right: 8px;
+        font-size: 18px;
+      }
+
+      .cta-button {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-decoration: none;
+        padding: 14px 28px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: 0.5px;
+        transition: transform 0.2s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        width: 100%;
+        text-align: center;
+        display: block;
+      }
+
+      .cta-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      .otp-code {
+        background-color: #667eea;
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        font-size: 24px;
+        font-weight: bold;
+        letter-spacing: 3px;
+        text-align: center;
+        display: block;
+        font-family: "Courier New", monospace;
+        margin: 10px 0;
+      }
+
+      .otp-info {
+        font-size: 14px;
+        color: #666666;
+        text-align: center;
+        margin-top: 10px;
+      }
+
+      .security-info {
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 30px 0;
+      }
+
+      .security-title {
+        color: #0c5460;
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+      }
+
+      .security-text {
+        color: #0c5460;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .footer {
+        background-color: #f8f9fa;
+        padding: 30px;
+        text-align: center;
+        border-top: 1px solid #e9ecef;
+      }
+
+      .footer-text {
+        color: #6c757d;
+        font-size: 14px;
+        margin-bottom: 15px;
+      }
+
+      .contact-info {
+        text-align: center;
+        margin-top: 20px;
+        padding: 20px;
+        background-color: #f1f3f4;
+        border-radius: 8px;
+      }
+
+      .contact-title {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 10px;
+      }
+
+      .contact-text {
+        color: #666666;
+        font-size: 14px;
+      }
+
+      .divider {
+        height: 1px;
+        background-color: #e9ecef;
+        margin: 30px 0;
+      }
+
+      @media only screen and (max-width: 600px) {
+        .email-container {
+          margin: 10px;
+          border-radius: 8px;
+        }
+
+        .header {
+          padding: 30px 20px;
+        }
+
+        .content {
+          padding: 30px 20px;
+        }
+
+        .title {
+          font-size: 24px;
+        }
+
+        .verification-methods {
+          padding: 20px;
+        }
+
+        .otp-code {
+          font-size: 20px;
+          letter-spacing: 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <table
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #f8f9fa; padding: 40px 0">
+      <tr>
+        <td align="center">
+          <div class="email-container">
+            <!-- Header -->
+            <div class="header">
+              <div class="logo">🎫 Te\ePass</div>
+              <div class="tagline">Secure Event Management Platform</div>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+              <div class="icon-container">
+                <div class="icon">✉️</div>
+              </div>
+
+              <h1 class="title">Email Verification</h1>
+
+              <p class="welcome-message">Welcome to TelePass!</p>
+
+              <p class="message">
+                Thank you for joining our secure event management platform. To
+                complete your registration and secure your account, please
+                verify your email address using one of the methods below.
+              </p>
+
+              <!-- Verification Methods -->
+              <div class="verification-methods">
+                <div class="method-title">Choose Your Verification Method</div>
+
+                <!-- Method 1: Click Link -->
+                <div class="method-option">
+                  <div class="method-label">
+                    <span class="emoji">🔗</span>
+                    Option 1: One-Click Verification
+                  </div>
+                  <p
+                    style="
+                      margin-bottom: 15px;
+                      color: #666666;
+                      font-size: 14px;
+                    ">
+                    Click the button below to instantly verify your email
+                    address:
+                  </p>
+                  <a
+                    href="#"
+                    class="cta-button"
+                    th:href="${verificationUrl}"
+                    style="margin-bottom: 15px; color: white; font-size: 14px">
+                    Verify My Email Address
+                  </a>
+                </div>
+
+                <!-- Method 2: OTP Code -->
+                <div class="method-option">
+                  <div class="method-label">
+                    <span class="emoji">🔐</span>
+                    Option 2: Verification Code
+                  </div>
+                  <p
+                    style="
+                      margin-bottom: 15px;
+                      color: #666666;
+                      font-size: 14px;
+                    ">
+                    Or enter this verification code on our website:
+                  </p>
+                  <div class="otp-code" th:text="${otp}">123456</div>
+                  <p class="otp-info">
+                    This code will expire in 5 minutes for your security.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Security Information -->
+              <div class="security-info">
+                <div class="security-title">🔒 Security Information</div>
+                <div class="security-text">
+                  If you did not create an account with TelePass, please ignore
+                  this email. Your email address will not be used without
+                  verification.
+                </div>
+              </div>
+
+              <div class="divider"></div>
+
+              <!-- Contact Information -->
+              <div class="contact-info">
+                <div class="contact-title">Need Assistance?</div>
+                <div class="contact-text">
+                  If you're having trouble with verification or have questions
+                  about your account, our support team is ready to help you get
+                  started.
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <p class="footer-text">
+                This is an automated email from TelePass. Please do not reply to
+                this message.
+              </p>
+              <p class="footer-text">
+                Best regards,<br />
+                <strong>The TelePass Team</strong>
+              </p>
+              <p class="footer-text" style="margin-top: 20px; font-size: 12px">
+                © 2025 TelePass. All rights reserved.<br />
+                Secure Event Management Platform
+              </p>
+            </div>
+          </div>
         </td>
-    </tr>
-</table>
-</body>
+      </tr>
+    </table>
+  </body>
 </html>

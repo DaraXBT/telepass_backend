@@ -12,6 +12,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.core.io.ByteArrayResource;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
 import java.io.UnsupportedEncodingException;
 
@@ -23,6 +25,7 @@ public class EmailServiceImpl implements EmailService {
     
     private final JavaMailSender mailSender;
     private final OtpConfig otpConfig;
+    private final TemplateEngine templateEngine;
     
     @Value("${WebBaseUrl:http://localhost:3000/}")
     private String webBaseUrl;
@@ -31,10 +34,9 @@ public class EmailServiceImpl implements EmailService {
     private String fromAddress;
     
     @Value("${email.from.name:Telepass Team}")
-    private String fromName;
-
-    @Override
-    public void sendRegistrationInvitation(String email, String name, String msg) throws MessagingException, UnsupportedEncodingException {        try {
+    private String fromName;    @Override
+    public void sendRegistrationInvitation(String email, String name, String msg) throws MessagingException, UnsupportedEncodingException {
+        try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             
@@ -42,11 +44,15 @@ public class EmailServiceImpl implements EmailService {
             helper.setTo(email);
             helper.setSubject("Registration Invitation - Telepass");
             
-            String content = String.format(
-                "Dear %s,\n\n%s\n\nPlease visit %s to complete your registration.\n\nBest regards,\nTelepass Team",
-                name, msg, webBaseUrl
-            );
-              helper.setText(content);
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("name", name);
+            context.setVariable("msg", msg);
+            
+            // Process the template
+            String htmlContent = templateEngine.process("otp-send", context);
+            
+            helper.setText(htmlContent, true);
             mailSender.send(message);
             
             log.info("Registration invitation sent successfully to: {}", email);
@@ -54,10 +60,9 @@ public class EmailServiceImpl implements EmailService {
             log.error("Failed to send registration invitation to: {}", email, e);
             throw e;
         }
-    }
-
-    @Override
-    public void sendVerificationEmail(String email, String verificationUrl, String otp) throws MessagingException, UnsupportedEncodingException {        try {
+    }@Override
+    public void sendVerificationEmail(String email, String verificationUrl, String otp) throws MessagingException, UnsupportedEncodingException {
+        try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             
@@ -65,18 +70,15 @@ public class EmailServiceImpl implements EmailService {
             helper.setTo(email);
             helper.setSubject("Email Verification - Telepass");
             
-            String content = String.format(
-                "Dear User,\n\n" +
-                "Please verify your email address using either method below:\n\n" +
-                "Method 1: Click the verification link:\n%s\n\n" +
-                "Method 2: Use this verification code: %s\n\n" +
-                "This code will expire in %d minutes.\n\n" +
-                "If you didn't request this verification, please ignore this email.\n\n" +
-                "Best regards,\nTelepass Team",
-                verificationUrl, otp, otpConfig.getExpirationTime() / 60
-            );
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("verificationUrl", verificationUrl);
+            context.setVariable("otp", otp);
             
-            helper.setText(content);
+            // Process the template
+            String htmlContent = templateEngine.process("verified-email", context);
+            
+            helper.setText(htmlContent, true);
             mailSender.send(message);
             
             log.info("Verification email sent successfully to: {}", email);
@@ -84,22 +86,24 @@ public class EmailServiceImpl implements EmailService {
             log.error("Failed to send verification email to: {}", email, e);
             throw e;
         }
-    }
-
-    @Override
-    public void sendOtpToEmail(String email, String otp) throws MessagingException, UnsupportedEncodingException {        try {
+    }    @Override
+    public void sendOtpToEmail(String email, String otp) throws MessagingException, UnsupportedEncodingException {
+        try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             
             helper.setFrom(fromAddress, fromName);
             helper.setTo(email);
-            helper.setSubject(otpConfig.getEmail().getSubject());
+            helper.setSubject("OTP Verification - Telepass");
             
-            String content = otpConfig.getEmail().getTemplate()
-                .replace("{otp}", otp)
-                .replace("{expiration}", String.valueOf(otpConfig.getExpirationTime() / 60));
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("otp", otp);
             
-            helper.setText(content);
+            // Process the template
+            String htmlContent = templateEngine.process("otp-email", context);
+            
+            helper.setText(htmlContent, true);
             mailSender.send(message);
             
             log.info("OTP email sent successfully to: {}", email);
@@ -107,9 +111,7 @@ public class EmailServiceImpl implements EmailService {
             log.error("Failed to send OTP email to: {}", email, e);
             throw e;
         }
-    }
-
-    @Override
+    }    @Override
     public void sendPasswordResetEmail(String email, String resetUrl) throws MessagingException, UnsupportedEncodingException {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -119,18 +121,14 @@ public class EmailServiceImpl implements EmailService {
             helper.setTo(email);
             helper.setSubject("Password Reset - Telepass");
             
-            String content = String.format(
-                "Dear User,\n\n" +
-                "You have requested to reset your password for your Telepass account.\n\n" +
-                "Click the following link to reset your password:\n%s\n\n" +
-                "This link will expire in 24 hours for security reasons.\n\n" +
-                "If you did not request this password reset, please ignore this email and your password will remain unchanged.\n\n" +
-                "For security reasons, please do not share this link with anyone.\n\n" +
-                "Best regards,\nTelepass Team",
-                resetUrl
-            );
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("resetUrl", resetUrl);
             
-            helper.setText(content);
+            // Process the template
+            String htmlContent = templateEngine.process("password-reset", context);
+            
+            helper.setText(htmlContent, true);
             mailSender.send(message);
             
             log.info("Password reset email sent successfully to: {}", email);
@@ -138,7 +136,7 @@ public class EmailServiceImpl implements EmailService {
             log.error("Failed to send password reset email to: {}", email, e);
             throw e;
         }
-    }    @Override
+    }@Override
     public void sendQRCodeEmail(String email, String userName, EventResponse event, byte[] qrCodeBytes) throws MessagingException, UnsupportedEncodingException {
         try {
             MimeMessage message = mailSender.createMimeMessage();

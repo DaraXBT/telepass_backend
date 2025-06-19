@@ -24,16 +24,15 @@ public class EmailServiceDebugImpl implements EmailService {
         log.info("Name: {}", name);
         log.info("Message: {}", msg);
         log.info("=========================================");
-    }
-
-    @Override
+    }    @Override
     public void sendVerificationEmail(String email, String verificationUrl, String otp) throws MessagingException, UnsupportedEncodingException {
-        log.info("=== DEBUG MODE: Verification Email ===");
-        log.info("To: {}", email);
-        log.info("Verification URL: {}", verificationUrl);
-        log.info("OTP: {}", otp);
-        log.info("Expiration: {} minutes", otpConfig.getExpirationTime() / 60);
-        log.info("=====================================");
+        log.info("✉️ === DEBUG MODE: Email Verification ===");
+        log.info("📧 To: {}", email);
+        log.info("🔗 Verification URL: {}", verificationUrl);
+        log.info("🔐 OTP Code: {}", otp);
+        log.info("⏰ Expiration: {} minutes", otpConfig.getExpirationTime() / 60);
+        log.info("🎨 Template: verified-email.html");
+        log.info("=========================================");
     }
 
     @Override
@@ -55,12 +54,13 @@ public class EmailServiceDebugImpl implements EmailService {
         log.info("===============================");
     }    @Override
     public void sendPasswordResetEmail(String email, String resetUrl) throws MessagingException, UnsupportedEncodingException {
-        log.info("=== DEBUG MODE: Password Reset Email ===");
-        log.info("To: {}", email);
-        log.info("Reset URL: {}", resetUrl);
-        log.info("Subject: Password Reset - Telepass");
-        log.info("==========================================");
-    }    @Override
+        log.info("🔐 === DEBUG MODE: Password Reset Email ===");
+        log.info("📧 To: {}", email);
+        log.info("🔗 Reset URL: {}", resetUrl);
+        log.info("📝 Subject: Password Reset - Telepass");
+        log.info("🎨 Template: password-reset.html");
+        log.info("===========================================");
+    }@Override
     public void sendQRCodeEmail(String email, String userName, com.example.tb.model.response.EventResponse event, byte[] qrCodeBytes) throws MessagingException, UnsupportedEncodingException {
         log.info("🎫 === DEBUG MODE: Enhanced QR Code Email ===");
         log.info("📧 To: {}", email);
