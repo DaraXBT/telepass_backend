@@ -47,9 +47,18 @@ public class Event {
     
     @Column(name = "end_date_time")
     private LocalDateTime endDateTime;
+      @Column(name = "location", columnDefinition = "TEXT")
+    private String location; // Can be text or URL for event location      // Pricing fields
+    @Column(name = "ticket_price")
+    private java.math.BigDecimal ticketPrice; // Price in KHR
     
-    @Column(name = "location", columnDefinition = "TEXT")
-    private String location; // Can be text or URL for event location
+    @Column(name = "currency")
+    @Builder.Default
+    private String currency = "KHR"; // Default currency
+    
+    @Column(name = "payment_required", nullable = true)
+    @Builder.Default
+    private Boolean paymentRequired = false; // Whether payment is required before getting QR code
 
     @OneToMany(mappedBy = "event")
     @JsonIgnore // Prevent circular reference during JSON serialization

@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.math.BigDecimal;
 
 import javax.imageio.ImageIO;
 
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -29,6 +31,8 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import com.example.tb.authentication.service.UserRegistrationService;
@@ -40,12 +44,23 @@ import com.example.tb.model.entity.Event;
 import com.example.tb.model.entity.EventRole;
 import com.example.tb.model.entity.User;
 import com.example.tb.model.response.EventResponse;
+import com.example.tb.authentication.service.payment.BakongPaymentService;
+import com.example.tb.model.request.PaymentRequest;
+import com.example.tb.model.response.PaymentResponse;
+
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.LuminanceSource;
 import com.google.zxing.MultiFormatReader;
 import com.google.zxing.Result;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
+import com.example.tb.utils.QrCodeUtil;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @Service
 public class TelegramServiceImpl extends TelegramLongPollingBot {
@@ -56,7 +71,6 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
     private boolean awaitingQrUpload = false;
 
     public TelegramServiceImpl() {
-        super(botToken);
     }
 
     @Override
@@ -67,13 +81,19 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
     @Override
     public String getBotToken() {
         return botToken;
-    }    @Autowired
+    }
+
+    @Autowired
     private UserRegistrationService userRegistrationService;
     @Autowired
-    private EventService eventService;    @Autowired
+    private EventService eventService;
+    @Autowired
     private EmailService emailService;
     @Autowired
     private AdminRepository adminRepository;
+    @Autowired
+    private BakongPaymentService bakongPaymentService; // Add payment service
+    
     private Map<Long, RegistrationContext> registrationContexts = new ConcurrentHashMap<>();    @Override
     public void onUpdateReceived(Update update) {
         try {
@@ -139,10 +159,15 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                             processRegistrationStep(chatId, messageText);
                         } else {
                             sendMessage(chatId, "⚠️ សូមស្កេន QR Code ដើម្បីចុះឈ្មោះចូលរួមព្រឹត្តិការណ៍។");
-                        }
-                    }
+                        }                    }
+                }            } else if (update.hasCallbackQuery()) {
+                // Handle callback queries (inline button presses)
+                long chatId = update.getCallbackQuery().getMessage().getChatId();
+                String callbackData = update.getCallbackQuery().getData();                
+                if ("check_payment".equals(callbackData)) {
+                    handlePaymentStatusCheck(chatId);
                 }
-            }        } catch (Exception e) {
+            }} catch (Exception e) {
             logger.error("Error in registration process: {}", e.getMessage(), e);
             // Check if it's a bot conflict error
             if (e.getMessage() != null && e.getMessage().contains("409")) {
@@ -292,69 +317,31 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                     if (isValidOccupation(messageText)) {
                         context.getUser().setOccupation(messageText);
 
-                        // Send processing message to user
-                        sendMessage(chatId, "⏳ កំពុងដំណើរការចុះឈ្មោះ...\n" +
-                                "📧 កំពុងបង្កើត QR Code និងផ្ញើអ៊ីមែល\n" +
-                                "សូមរង់ចាំមួយភ្លែត...");
-
-                        // Complete registration
-                        User registeredUser = userRegistrationService.registerUser(context.getUser());
-
-                        // Register user for the event
-                        if (context.getEventId() != null) {
-                            eventService.registerUserForEvent(context.getEventId(), registeredUser);
+                        // Check if payment is required
+                        if (context.isPaymentRequired()) {
+                            // Move to payment step
+                            context.setCurrentStep(RegistrationContext.RegistrationStep.PAYMENT);
+                            handlePaymentStep(chatId, context);
+                        } else {
+                            // Direct registration for free events
+                            processCompleteRegistration(chatId, context);
                         }
-
-                        // Generate QR Code and save to filesystem
-                        String qrCodeFilePath = userRegistrationService.generateAndSaveQRCode(
-                                context.getEventId().toString(),
-                                registeredUser.getId().toString(),
-                                registeredUser.getRegistrationToken());                        // Update user with QR code file path
-                        registeredUser.setQrCode(qrCodeFilePath);
-                        userRegistrationService.updateUser(registeredUser);                        // Generate Base64 QR Code for Telegram
-                        String qrCodeBase64 = userRegistrationService.generateQRCode(
-                                context.getEventId().toString(),
-                                registeredUser.getId().toString(),
-                                registeredUser.getRegistrationToken());
-
-                        // Send QR code to user's email
-                        try {
-                            Optional<EventResponse> eventOpt = eventService.getEventById(context.getEventId());
-                            if (eventOpt.isPresent()) {
-                                EventResponse event = eventOpt.get();
-                                  // Convert base64 to byte array for email attachment
-                                byte[] qrCodeBytes = Base64.getDecoder().decode(qrCodeBase64);                                emailService.sendQRCodeEmail(
-                                    registeredUser.getEmail(),
-                                    registeredUser.getFullName(),
-                                    event,
-                                    qrCodeBytes
-                                );
-                                
-                                logger.info("QR code email sent successfully to: {}", registeredUser.getEmail());
-                                
-                                // Send confirmation that email was sent
-                                sendMessage(chatId, "✅ អ៊ីមែលត្រូវបានផ្ញើជោគជ័យ!\n" +
-                                        "📧 សូមពិនិត្យអ៊ីមែលរបស់អ្នកសម្រាប់ QR Code");
-                            } else {
-                                logger.warn("Event not found for QR code email: {}", context.getEventId());
-                                sendMessage(chatId, "⚠️ មិនអាចផ្ញើអ៊ីមែលបាន តែការចុះឈ្មោះបានជោគជ័យ");
-                            }
-                        } catch (Exception e) {
-                            logger.error("Failed to send QR code email to {}: {}", registeredUser.getEmail(), e.getMessage(), e);
-                            // Continue with registration even if email fails
-                            sendMessage(chatId, "⚠️ មិនអាចផ្ញើអ៊ីមែលបាន តែការចុះឈ្មោះបានជោគជ័យ\n" +
-                                    "QR Code នឹងត្រូវបានផ្ញើនៅទីនេះ");
-                        }
-
-                        // Send QR Code and completion message
-                        sendQRCodeAndCompleteRegistration(chatId, qrCodeBase64);
-
-                        // Remove context
-                        registrationContexts.remove(chatId);
                     } else {
                         sendMessage(chatId, "⚠️ មុខរបរមិនត្រឹមត្រូវ។ សូមបញ្ចូលមុខរបរម្តងទៀត។\n" +
                                 "ឬស្កេន QR Code ម្តងទៀតដើម្បីចាប់ផ្តើមការចុះឈ្មោះ។");
                     }
+                    break;
+
+                case PAYMENT:
+                    // Handle payment-related messages (retry, status check, etc.)
+                    handlePaymentMessages(chatId, messageText, context);
+                    break;
+
+                case PAYMENT_PENDING:
+                    // User is waiting for payment confirmation
+                    sendMessage(chatId, "⏳ កំពុងរង់ចាំការទូទាត់...\n" +
+                            "📱 សូមបំពេញការទូទាត់តាមរយៈ Bakong ហើយការចុះឈ្មោះនឹងបន្តដោយស្វ័យប្រវត្តិ។\n\n" +
+                            "💡 ប្រសិនបើអ្នកបានបំពេញការទូទាត់រួចហើយ សូមរង់ចាំមួយភ្លែត...");
                     break;
 
                 case COMPLETED:
@@ -367,14 +354,18 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                     "ឬស្កេន QR Code ម្តងទៀតដើម្បីចាប់ផ្តើមការចុះឈ្មោះ។");
         }
     }    private void sendQRCodeAndCompleteRegistration(long chatId, String qrCodeBase64) throws TelegramApiException {
+        sendQRCodeAndCompleteRegistration(chatId, qrCodeBase64, "🎉 ការចុះឈ្មោះបានបញ្ចប់ដោយជោគជ័យ!");
+    }    private void sendQRCodeAndCompleteRegistration(long chatId, String qrCodeBase64, String customMessage) throws TelegramApiException {
+        RegistrationContext context = registrationContexts.get(chatId);
+        
         // Decode Base64 QR Code
         byte[] qrCodeBytes = Base64.getDecoder().decode(qrCodeBase64);
 
-        // Send QR Code as photo
+        // Send QR Code as photo via Telegram
         SendPhoto sendPhoto = new SendPhoto();
         sendPhoto.setChatId(chatId);
         sendPhoto.setPhoto(new InputFile(new ByteArrayInputStream(qrCodeBytes), "registration_qr.png"));
-        sendPhoto.setCaption("🎉 ការចុះឈ្មោះបានបញ្ចប់ដោយជោគជ័យ!\n\n" +
+        sendPhoto.setCaption(customMessage + "\n\n" +
                 "📱 នេះគឺជា QR Code របស់អ្នក\n" +
                 "📧 QR Code ក៏ត្រូវបានផ្ញើទៅអ៊ីមែលរបស់អ្នកដែរ\n\n" +
                 "📋 សូមចងចាំ:\n" +
@@ -383,8 +374,40 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 "• មកដល់មុនម៉ោង 15-30 នាទី\n\n" +
                 "🙏 អរគុណសម្រាប់ការចុះឈ្មោះ!");
 
-        // Send the QR code
+        // Send the QR code via Telegram
         execute(sendPhoto);
+        
+        // Send QR code via email if user has email and event context is available
+        if (context != null && context.getUser().getEmail() != null && !context.getUser().getEmail().trim().isEmpty()) {
+            try {
+                // Get event details for email
+                Optional<EventResponse> eventOpt = eventService.getEventById(context.getEventId());
+                if (eventOpt.isPresent()) {
+                    EventResponse event = eventOpt.get();
+                    
+                    // Send QR code email
+                    emailService.sendQRCodeEmail(
+                        context.getUser().getEmail(),
+                        context.getUser().getFullName(),
+                        event,
+                        qrCodeBytes
+                    );
+                    
+                    logger.info("QR code email sent successfully to: {}", context.getUser().getEmail());
+                    
+                    // Send confirmation message about email
+                    sendMessage(chatId, "📧 QR Code បានផ្ញើទៅអ៊ីមែល " + context.getUser().getEmail() + " ហើយ!");
+                } else {
+                    logger.warn("Event not found for ID: {}, cannot send QR code email", context.getEventId());
+                }
+                
+            } catch (Exception e) {
+                logger.error("Failed to send QR code email to: {}", context.getUser().getEmail(), e);
+                sendMessage(chatId, "⚠️ មានបញ្ហាក្នុងការផ្ញើអ៊ីមែល។ QR Code នៅតែអាចប្រើបានតាម Telegram។");
+            }
+        } else {
+            logger.warn("No email provided or context missing, skipping QR code email");
+        }
     }
 
     private void sendGenderKeyboard(long chatId) {
@@ -412,9 +435,7 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             logger.error("Error sending gender keyboard", e);
         }
-    }
-
-    private void startEventRegistration(long chatId, UUID eventId) {
+    }    private void startEventRegistration(long chatId, UUID eventId) {
         try {
             // Check if event exists
             Optional<EventResponse> eventOpt = eventService.getEventById(eventId);
@@ -428,6 +449,11 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
             // Initialize registration context with event ID
             RegistrationContext context = new RegistrationContext();
             context.setEventId(eventId);
+              // Check if event requires payment
+            boolean requiresPayment = event.getPaymentRequired() != null && event.getPaymentRequired() && 
+                                    event.getTicketPrice() != null && event.getTicketPrice().compareTo(java.math.BigDecimal.ZERO) > 0;
+            context.setPaymentRequired(requiresPayment);
+            
             registrationContexts.put(chatId, context);
 
             // Send event image if available
@@ -462,13 +488,15 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
             
             // Format location information
             String locationInfo = formatEventLocation(event);
+              // Format pricing information
+            String pricingInfo = formatEventPricing(event);
             
             String welcomeMessage = String.format("""
                     🎉 សូមស្វាគមន៍មកកាន់ការចុះឈ្មោះចូលរួមព្រឹត្តិការណ៍!
 
                     📋 ព្រឹត្តិការណ៍: %s
                     📝 ការពិពណ៌នា: %s
-                    👥 អ្នករៀបចំ: %s%s%s
+                    👥 អ្នករៀបចំ: %s%s%s%s
 
                     សូមបំពេញព័ត៌មានខាងក្រោមដើម្បីចុះឈ្មោះ៖
                     ✍️ សូមបញ្ចូលឈ្មោះពេញរបស់អ្នក៖""",
@@ -476,7 +504,8 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                     event.getDescription(),
                     formatOrganizers(eventRoles),
                     dateTimeInfo,
-                    locationInfo);
+                    locationInfo,
+                    pricingInfo);
 
             sendMessage(chatId, welcomeMessage);
         } catch (Exception e) {
@@ -970,7 +999,7 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 • QR កូដមិនត្រឹមត្រូវនឹងត្រូវបានបដិសេធ
                 • សកម្មភាពចុះឈ្មោះទាំងអស់ត្រូវបានកត់ត្រា
                 
-                📞 **ជំនួយ:** ទាក់ទងអ្នកគ្រប់គ្រងប្រព័ន្ធប្រសិនបើអ្នកជួបបញ្ហា។""";
+                📞 **ជំនួយ:** ទាក់ទងអ្នកគ្រប់គ្រងប្រសិនបើអ្នកជួបបញ្ហា។""";
 
         sendMessage(chatId, helpMessage);
     }
@@ -1000,6 +1029,333 @@ public class TelegramServiceImpl extends TelegramLongPollingBot {
                 user != null ? user.getEmail() : "unknown", e.getMessage(), e);
             // Don't fail the check-in process if email fails
         }
+    }    /**
+     * Formats event pricing information for display in welcome message
+     */
+    private String formatEventPricing(EventResponse event) {
+        if (event.getTicketPrice() != null && event.getTicketPrice().compareTo(BigDecimal.ZERO) > 0) {
+            String currency = event.getCurrency() != null ? event.getCurrency() : "KHR";
+            return String.format("\n💰 តម្លៃសំបុត្រ: %s %s", 
+                    event.getTicketPrice().toPlainString(), currency);
+        } else {
+            return "\n💰 តម្លៃ: 🆓 ចូលរួមដោយឥតគិតថ្លៃ";
+        }
     }
 
+    /**
+     * Handle payment step for paid events
+     */
+    private void handlePaymentStep(long chatId, RegistrationContext context) {
+        try {
+            // Get event details for payment
+            Optional<EventResponse> eventOpt = eventService.getEventById(context.getEventId());
+            if (eventOpt.isEmpty()) {
+                sendMessage(chatId, "❌ រកមិនឃើញព្រឹត្តិការណ៍។ សូមចាប់ផ្តើមម្តងទៀត។");
+                registrationContexts.remove(chatId);
+                return;
+            }            EventResponse event = eventOpt.get();
+            
+            // Find existing user or register new user
+            User registeredUser;
+            Optional<User> existingUser = userRegistrationService.findUserByPhoneNumber(context.getUser().getPhoneNumber());            if (existingUser.isPresent()) {
+                registeredUser = existingUser.get();
+                logger.info("Found existing user with phone number: {}", context.getUser().getPhoneNumber());
+            } else {
+                registeredUser = userRegistrationService.registerUser(context.getUser());
+                logger.info("Registered new user with phone number: {}", context.getUser().getPhoneNumber());
+            }
+            
+            // Create payment request
+            PaymentRequest paymentRequest = PaymentRequest.builder()
+                    .eventId(context.getEventId())
+                    .userId(registeredUser.getId())
+                    .amount(event.getTicketPrice())
+                    .currency(event.getCurrency() != null ? event.getCurrency() : "KHR")
+                    .description("Event Registration: " + event.getName())
+                    .payerName(registeredUser.getFullName())
+                    .payerPhone(registeredUser.getPhoneNumber())
+                    .payerEmail(registeredUser.getEmail())
+                    .returnUrl("https://t.me/telepasskhbot") // Return to Telegram bot
+                    .build();
+
+            // Initiate payment with Bakong
+            PaymentResponse paymentResponse = bakongPaymentService.initiatePayment(paymentRequest);
+            
+            // Store payment info in context
+            context.setMerchantTransactionId(paymentResponse.getMerchantTransactionId());
+            context.setCurrentStep(RegistrationContext.RegistrationStep.PAYMENT_PENDING);
+
+            // Send payment instructions to user
+            sendPaymentInstructions(chatId, paymentResponse, event);
+
+        } catch (Exception e) {
+            logger.error("Error handling payment step for user at event {}: {}", context.getEventId(), e.getMessage(), e);
+            sendMessage(chatId, "❌ មានបញ្ហាក្នុងការដំណើរការទូទាត់។ សូមព្យាយាមម្តងទៀត។");
+        }
+    }    /**
+     * Send payment instructions with real Bakong payment QR code
+     */
+    private void sendPaymentInstructions(long chatId, PaymentResponse paymentResponse, EventResponse event) {
+        try {
+            String currency = event.getCurrency() != null ? event.getCurrency() : "KHR";
+            
+            // Create payment message with real QR code
+            SendMessage message = new SendMessage();
+            message.setChatId(chatId);
+            message.setText(String.format("""
+                    💳 ការទូទាត់ឱ្យចូលរួមព្រឹត្តិការណ៍
+                    
+                    📋 ព្រឹត្តិការណ៍: %s
+                    💰 ចំនួនទឹកប្រាក់: %s %s
+                    🔢 លេខមុខងារ: %s
+                    
+                    📱 សូមស្កេន QR Code ខាងក្រោមដើម្បីបង់ប្រាក់តាមរយៈ Bakong
+                    
+                    ⏰ ការទូទាត់នេះនឹងផុតកំណត់ក្នុង 30 នាទី
+                    """,
+                    event.getName(),
+                    paymentResponse.getAmount().toPlainString(),
+                    currency,
+                    paymentResponse.getMerchantTransactionId()));
+
+            // Add inline keyboard with payment status check only
+            InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup();
+            List<List<InlineKeyboardButton>> rows = new ArrayList<>();
+            
+            // Payment status check button
+            List<InlineKeyboardButton> row1 = new ArrayList<>();
+            InlineKeyboardButton statusButton = new InlineKeyboardButton();
+            statusButton.setText("🔄 ពិនិត្យស្ថានភាពការទូទាត់");
+            statusButton.setCallbackData("check_payment");
+            row1.add(statusButton);
+            rows.add(row1);
+            
+            keyboard.setKeyboard(rows);
+            message.setReplyMarkup(keyboard);
+            
+            execute(message);
+            
+            // Send the actual payment QR code if available
+            if (paymentResponse.getQrCodeUrl() != null || paymentResponse.getPaymentUrl() != null) {
+                sendPaymentQRCode(chatId, paymentResponse, event);
+            } else {
+                sendMessage(chatId, "❌ មិនអាចបង្កើត QR Code ទូទាត់បាន។ សូមព្យាយាមម្តងទៀត។");
+            }
+
+        } catch (Exception e) {
+            logger.error("Error sending payment instructions: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ មានបញ្ហាក្នុងការបង្កើតការទូទាត់។ សូមព្យាយាមម្តងទៀត។");
+        }
+    }
+      /**
+     * Send the actual Bakong payment QR code as an image
+     */
+    private void sendPaymentQRCode(long chatId, PaymentResponse paymentResponse, EventResponse event) {
+        try {
+            String currency = event.getCurrency() != null ? event.getCurrency() : "KHR";
+            
+            // Send instruction message first
+            SendMessage instructionMessage = new SendMessage();
+            instructionMessage.setChatId(chatId);
+            instructionMessage.setText(String.format("""
+                    🏦 QR Code ការទូទាត់ Bakong
+                    
+                    💰 ចំនួន: %s %s
+                    🏪 អ្នកទទួល: %s
+                    🆔 Transaction: %s
+                    
+                    📋 វិធីប្រើប្រាស់:
+                    1️⃣ បើកកម្មវិធី Bakong
+                    2️⃣ ចុច "ស្កេន" ឬ "Scan"
+                    3️⃣ ស្កេន QR Code ខាងក្រោម
+                    4️⃣ បញ្ជាក់ការទូទាត់
+                    
+                    ✅ ការទូទាត់នឹងត្រូវបានបញ្ជាក់ដោយស្វ័យប្រវត្តិ
+                    """,
+                    paymentResponse.getAmount().toPlainString(),
+                    currency,
+                    "VEASNA Dara",
+                    paymentResponse.getMerchantTransactionId()));
+
+            execute(instructionMessage);
+              // Generate and send QR code image if we have the QR code data
+            if (paymentResponse.getQrCodeUrl() != null && !paymentResponse.getQrCodeUrl().isEmpty()) {
+                // Use Bakong's QR code image directly
+                sendBakongQRCodeImage(chatId, paymentResponse.getQrCodeUrl(), paymentResponse.getMerchantTransactionId());
+            } else if (paymentResponse.getQrCodeData() != null && !paymentResponse.getQrCodeData().isEmpty()) {
+                // Fallback: generate QR code locally if no Bakong URL
+                sendQRCodeImage(chatId, paymentResponse.getQrCodeData(), paymentResponse.getMerchantTransactionId());
+            } else {
+                sendMessage(chatId, "❌ មិនអាចបង្កើត QR Code ទូទាត់បាន។");
+            }
+
+        } catch (Exception e) {
+            logger.error("Error sending payment QR code: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ មិនអាចបង្ហាញ QR Code ទូទាត់បាន។");
+        }
+    }
+      /**
+     * Generate QR code image and send it to Telegram
+     */
+    private void sendQRCodeImage(long chatId, String qrCodeData, String transactionId) {
+        File qrCodeFile = null;
+        try {
+            // Create temporary file for QR code
+            String fileName = "qr_" + transactionId + ".png";
+            String tempDir = System.getProperty("java.io.tmpdir");
+            String filePath = Paths.get(tempDir, fileName).toString();
+            qrCodeFile = new File(filePath);
+            
+            // Generate QR code image using the utility
+            int qrSize = 400; // 400x400 pixels
+            QrCodeUtil.generateQRCodeImage(qrCodeData, qrSize, qrSize, filePath);
+            
+            // Send the QR code image
+            SendPhoto sendPhoto = new SendPhoto();
+            sendPhoto.setChatId(chatId);
+            sendPhoto.setPhoto(new InputFile(qrCodeFile));
+            sendPhoto.setCaption("📱 ស្កេន QR Code នេះដើម្បីទូទាត់\nScan this QR Code to pay");
+            
+            execute(sendPhoto);
+            
+            logger.info("Successfully sent QR code image for transaction: {}", transactionId);
+            
+        } catch (Exception e) {
+            logger.error("Error generating/sending QR code image for transaction {}: {}", transactionId, e.getMessage(), e);
+            // Fallback to sending text message
+            sendMessage(chatId, "❌ មិនអាចបង្ហាញ QR Code រូបភាពបាន។ សូមព្យាយាមម្តងទៀត។");
+        } finally {
+            // Clean up temporary file
+            if (qrCodeFile != null && qrCodeFile.exists()) {
+                try {
+                    Files.deleteIfExists(qrCodeFile.toPath());
+                } catch (Exception cleanup) {
+                    logger.warn("Failed to cleanup QR code temp file: {}", cleanup.getMessage());
+                }
+            }
+        }
+    }
+    /**
+     * Download and send Bakong QR code image directly from Bakong servers
+     */
+    private void sendBakongQRCodeImage(long chatId, String qrCodeUrl, String transactionId) {
+        File qrCodeFile = null;
+        try {
+            // Create temporary file for QR code
+            String fileName = "bakong_qr_" + transactionId + ".png";
+            String tempDir = System.getProperty("java.io.tmpdir");
+            String filePath = Paths.get(tempDir, fileName).toString();
+            qrCodeFile = new File(filePath);
+            
+            // Download QR code image from Bakong
+            logger.info("Downloading QR code image from Bakong: {}", qrCodeUrl);
+            
+            RestTemplate restTemplate = new RestTemplate();
+            byte[] imageBytes = restTemplate.getForObject(qrCodeUrl, byte[].class);
+            
+            if (imageBytes != null && imageBytes.length > 0) {
+                // Save image to temporary file
+                Files.write(qrCodeFile.toPath(), imageBytes);
+                
+                // Send the QR code image to Telegram
+                SendPhoto sendPhoto = new SendPhoto();
+                sendPhoto.setChatId(chatId);
+                sendPhoto.setPhoto(new InputFile(qrCodeFile));
+                sendPhoto.setCaption("💳 QR Code ការទូទាត់ Bakong (Official)\n\n" +
+                    "📱 ស្កេន QR Code នេះដើម្បីធ្វើការទូទាត់តាមរយៈកម្មវិធី Bakong");
+                
+                execute(sendPhoto);
+                
+                logger.info("Successfully sent Bakong QR code image for transaction: {}", transactionId);
+            } else {
+                logger.warn("Failed to download QR code image from Bakong, falling back to local generation");
+                // Fallback to local generation if download fails
+                sendMessage(chatId, "⚠️ មិនអាចទាញយក QR Code ពី Bakong បាន។ សូមប្រើ URL: " + qrCodeUrl);
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error downloading/sending Bakong QR code image for transaction {}: {}", 
+                transactionId, e.getMessage(), e);
+            
+            // Fallback: send the URL as text
+            sendMessage(chatId, "❌ មិនអាចទាញយក QR Code រូបភាពពី Bakong បាន។\n🔗 URL: " + qrCodeUrl);
+        } finally {
+            // Clean up temporary file
+            if (qrCodeFile != null && qrCodeFile.exists()) {
+                try {
+                    qrCodeFile.delete();
+                    logger.debug("Cleaned up Bakong QR code file: {}", qrCodeFile.getPath());
+                } catch (Exception e) {
+                    logger.warn("Failed to delete Bakong QR code file: {}", qrCodeFile.getPath());                }
+            }
+        }
+    }
+
+    /**
+     * Handle payment status check button clicks
+     */
+    private void handlePaymentStatusCheck(long chatId) {
+        try {
+            sendMessage(chatId, "🔍 កំពុងពិនិត្យស្ថានភាពការទូទាត់...\nChecking payment status...");
+            // Additional logic can be added here for specific payment status checks
+        } catch (Exception e) {
+            logger.error("Error handling payment status check: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ មានបញ្ហាក្នុងការពិនិត្យស្ថានភាព។");
+        }
+    }
+
+    /**
+     * Process complete registration
+     */
+    private void processCompleteRegistration(long chatId, RegistrationContext context) {
+        try {
+            // Process final registration completion
+            sendMessage(chatId, "✅ ការចុះឈ្មោះបានបញ្ចប់ដោយជោគជ័យ!\nRegistration completed successfully!");
+            
+            // Clear the context
+            registrationContexts.remove(chatId);
+            
+        } catch (Exception e) {
+            logger.error("Error processing complete registration: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ មានបញ្ហាក្នុងការបញ្ចប់ការចុះឈ្មោះ។");
+        }
+    }
+
+    /**
+     * Handle payment-related messages
+     */
+    private void handlePaymentMessages(long chatId, String messageText, RegistrationContext context) {
+        try {
+            if (messageText.contains("ស្ថានភាព") || messageText.contains("status") || messageText.contains("ពិនិត្យ")) {
+                checkPaymentStatus(chatId, context);
+            } else {
+                sendMessage(chatId, "⏳ រង់ចាំការទូទាត់...\n" +
+                        "💡 ប្រសិនបើអ្នកបានទូទាត់រួចហើយ សូមរង់ចាំការបញ្ជាក់ដោយស្វ័យប្រវត្តិ។");
+            }
+        } catch (Exception e) {
+            logger.error("Error handling payment messages: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ មានបញ្ហាក្នុងការដោះស្រាយសារ។");
+        }
+    }
+
+    /**
+     * Check payment status manually
+     */
+    private void checkPaymentStatus(long chatId, RegistrationContext context) {
+        try {
+            if (context.getMerchantTransactionId() == null) {
+                sendMessage(chatId, "❌ រកមិនឃើញព័ត៌មានការទូទាត់។");
+                return;
+            }
+            
+            sendMessage(chatId, "🔍 កំពុងពិនិត្យស្ថានភាពការទូទាត់...\n" +
+                "Transaction ID: " + context.getMerchantTransactionId());
+            
+            // Additional payment status checking logic can be added here
+            
+        } catch (Exception e) {
+            logger.error("Error checking payment status: {}", e.getMessage(), e);
+            sendMessage(chatId, "❌ មិនអាចពិនិត្យស្ថានភាពការទូទាត់បាន។");
+        }
+    }
 }

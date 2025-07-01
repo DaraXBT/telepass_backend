@@ -6,6 +6,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,11 @@ public class UserRegistrationService {
     // Update existing user
     public User updateUser(User user) {
         return userRepository.save(user);
+    }
+
+    // Find user by phone number
+    public Optional<User> findUserByPhoneNumber(String phoneNumber) {
+        return userRepository.findByPhoneNumber(phoneNumber);
     }
 
     // Generate QR Code with registration token

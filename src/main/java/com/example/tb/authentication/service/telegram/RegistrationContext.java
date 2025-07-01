@@ -8,6 +8,10 @@ public class RegistrationContext {
     private UUID eventId;
     private RegistrationStep currentStep;
     private User user;
+    // Payment related fields
+    private boolean paymentRequired = false;
+    private String merchantTransactionId;
+    private boolean paymentCompleted = false;
 
     public RegistrationContext() {
         this.currentStep = RegistrationStep.START;
@@ -48,6 +52,31 @@ public class RegistrationContext {
         this.currentStep = currentStep;
     }
 
+    // Payment related getters and setters
+    public boolean isPaymentRequired() {
+        return paymentRequired;
+    }
+
+    public void setPaymentRequired(boolean paymentRequired) {
+        this.paymentRequired = paymentRequired;
+    }
+
+    public String getMerchantTransactionId() {
+        return merchantTransactionId;
+    }
+
+    public void setMerchantTransactionId(String merchantTransactionId) {
+        this.merchantTransactionId = merchantTransactionId;
+    }
+
+    public boolean isPaymentCompleted() {
+        return paymentCompleted;
+    }
+
+    public void setPaymentCompleted(boolean paymentCompleted) {
+        this.paymentCompleted = paymentCompleted;
+    }
+
     // Enum for RegistrationStep (moved inside or alongside the class)
     public enum RegistrationStep {
         START,
@@ -58,6 +87,8 @@ public class RegistrationContext {
         ADDRESS,
         EMAIL,
         OCCUPATION,
+        PAYMENT, // New step for payment
+        PAYMENT_PENDING, // Waiting for payment confirmation
         COMPLETED
     }
 }

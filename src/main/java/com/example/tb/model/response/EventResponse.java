@@ -27,11 +27,14 @@ public class EventResponse {
     private String qrCodePath;
     private String eventImg;
     private UUID adminId; // Admin who created/owns this event
-    
-    // New fields for event scheduling and location
+      // New fields for event scheduling and location
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
-    private String location; // Can be text or URL for event location
+    private String location; // Can be text or URL for event location    
+    // Pricing fields
+    private java.math.BigDecimal ticketPrice;
+    private String currency;
+    private Boolean paymentRequired;
     
     private List<EventRole> eventRoles;
     private Set<UUID> registeredUsers;

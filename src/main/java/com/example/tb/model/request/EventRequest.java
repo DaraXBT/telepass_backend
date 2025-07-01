@@ -25,11 +25,15 @@ public class EventRequest {
     private String qrCodePath;
     private String eventImg;
     private UUID adminId; // Admin who creates/owns this event
-    
-    // New fields for event scheduling and location
+      // New fields for event scheduling and location
     private LocalDateTime startDateTime;
     private LocalDateTime endDateTime;
-    private String location; // Can be text or URL for event location
+    private String location; // Can be text or URL for event location      // Pricing fields
+    private java.math.BigDecimal ticketPrice; // Price in KHR
+    @Builder.Default
+    private String currency = "KHR"; // Default currency
+    @Builder.Default
+    private Boolean paymentRequired = false; // Whether payment is required before getting QR code
     
     private List<EventRoleRequest> eventRoles;
     private Set<UUID> registeredUsers;

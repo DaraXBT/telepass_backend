@@ -1,0 +1,170 @@
+spring:
+  application:
+    name: telepass
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  # Mail configuration for OTP - Google SMTP Configuration
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: daraa.dev@gmail.com
+    password: kybx juvu gcui tdrs
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        transport:
+          protocol: smtp
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            enable: false
+            trust: smtp.gmail.com
+          connectiontimeout: 30000
+          timeout: 30000
+          writetimeout: 30000
+          localhost: telepass-app
+        debug: false
+
+  # Disable actuator endpoints that cause excessive logging
+  management:
+    endpoints:
+      enabled-by-default: false
+    health:
+      mail:
+        enabled: true
+
+  servlet:
+    multipart:
+      max-file-size: 1000MB
+      max-request-size: 1000MB
+      enabled: true
+      file-size-threshold: 2KB
+
+# Logging configuration to reduce verbosity
+logging:
+  level:
+    org.hibernate: WARN
+    org.springframework: WARN
+    org.apache: WARN
+    com.zaxxer.hikari: WARN
+    jakarta.mail: DEBUG
+    org.springframework.boot.actuate: ERROR
+    org.telegram.telegrambots: WARN
+    com.example.tb.configuration.TelegramBotSessionManager: INFO
+    com.example.tb.authentication.service.admin.AdminServiceImpl: INFO
+    com.example.tb.jwt: INFO
+    root: INFO
+
+jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  refresh-token: 604800
+
+file:
+  uploadPath: C:\Users\Techo\OneDrive\Documents\Internship\testing\telepass_backend\src\main\resources\files
+
+file-upload:
+  server-path: /home/was/bizweb_api/files
+
+WebBaseUrl: http://localhost:3000/
+BaseUrl: http://localhost:8080/
+
+server:
+  port: 8080
+
+myAdmin:
+  username: admin
+  password: admin123
+
+# OTP Configuration
+otp:
+  expiration-time: 300 # 5 minutes in seconds
+  length: 6 # Number of digits in OTP
+  max-attempts: 3 # Maximum verification attempts
+  cooldown-time: 60 # Cooldown time in seconds before requesting new OTP
+  email:
+    subject: "Your OTP Code"
+    template: |
+      Dear User,
+      Your One-Time Password (OTP) is: {otp}
+      This code will expire in {expiration} minutes.
+      If you didn't request this code, please ignore this email.
+      Best regards,
+      Telepass Team
+
+# Disable debug mode for email testing (set to false for production)
+mail:
+  debug:
+    mode: false
+
+# Bakong Payment Configuration - Simplified for Practice
+bakong:
+  api:
+    token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjp7ImlkIjoiN2U0YzM4ZTA4MjI2NDk2YyJ9LCJpYXQiOjE3NTAzMTMyODMsImV4cCI6MTc1ODA4OTI4M30.4cls6MsMX70ZCF8E4g0F7nCATdelhYQwwAst4QfYZJE
+    base-url: https://api-bakong.nbc.gov.kh
+    transaction-check-url: https://api-bakong.nbc.gov.kh/v1/check_transaction_by_md5
+    version: v1
+    merchant-id: dara_veasna@aclb
+    callback-url: http://localhost:8080/api/v1/payments/bakong/callback
+    return-url: http://localhost:3000/payment/result
+    sandbox: true
+    mock-mode: true
+    timeout: 30000
+    retry:
+      max-attempts: 3
+      delay: 1000
+    signature:
+      algorithm: SHA256withRSA
+      charset: UTF-8
+    webhook:
+      verify-signature: false
+      timeout: 10000
+      ip-whitelist:
+        - "127.0.0.1"
+        - "::1"
+        - "0.0.0.0/0"
+
+  merchant:
+    id: dara_veasna@aclb
+    name: VEASNA Dara
+    city: Phnom Penh
+    phone: 011386747
+    acquiring-bank: ACLB
+    category-code: "5999"
+
+  qr:
+    size: 300
+    format: PNG
+    error-correction: M
+    enable-khmer-language: false
+
+  payment:
+    currency: KHR
+    min-amount: 1000
+    max-amount: 50000000
+    expiry-minutes: 30
+    auto-confirm-timeout: 60
+    notification:
+      enabled: true
+      success-template: "payment-success"
+      failure-template: "payment-failed"
+
+  monitoring:
+    metrics-enabled: true
+    audit-log-enabled: false
+    transaction-log-retention-days: 7

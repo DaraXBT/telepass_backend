@@ -21,11 +21,15 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
-@AllArgsConstructor
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.util.Objects;
+
+@Getter
+@Setter
 @Entity
 @Table(name = "users")
 public class User {
@@ -66,10 +70,11 @@ public class User {
     private String occupation;
 
     @Column(name = "registration_token", unique = true)
-    private String registrationToken;
+    private String registrationToken;    @ManyToMany(mappedBy = "registeredUsers")
+    @JsonIgnore // Prevent lazy loading issues during JSON serialization
+    private Set<Event> registeredEvents = new HashSet<>();
 
-    @ManyToMany(mappedBy = "registeredUsers")
-    private Set<Event> registeredEvents = new HashSet<>();    @Column(name = "checked_in")
+    @Column(name = "checked_in")
     private boolean checkedIn = false;
 
     @Column(name = "qr_code")
@@ -78,11 +83,20 @@ public class User {
     public enum Gender {
         MALE, FEMALE, OTHER
     }
-
-
     // Constructors, getters, and setters
     public User() {
         this.registrationToken = UUID.randomUUID().toString();
+    }    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        User user = (User) o;
+        return Objects.equals(id, user.id);
     }
 
+    @Override
+    public int hashCode() {
+        // Use a constant hash code for transient instances to avoid issues with lazy collections
+        return id != null ? Objects.hash(id) : 31;
+    }
 }

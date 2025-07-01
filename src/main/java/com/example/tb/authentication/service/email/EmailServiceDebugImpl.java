@@ -98,4 +98,16 @@ public class EmailServiceDebugImpl implements EmailService {
         log.info("Time: {}", java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
         log.info("============================================");
     }
+
+    @Override
+    public void sendPaymentConfirmationEmail(String email, com.example.tb.model.response.PaymentResponse payment, com.example.tb.model.response.EventResponse event) throws MessagingException, UnsupportedEncodingException {
+        log.info("💳 === DEBUG MODE: Payment Confirmation Email ===");
+        log.info("📧 To: {}", email);
+        log.info("💰 Transaction ID: {}", payment.getMerchantTransactionId());
+        log.info("🎉 Event: {}", event.getName());
+        log.info("💵 Amount: {} {}", payment.getAmount(), payment.getCurrency());
+        log.info("📝 Subject: Payment Confirmation - {} - Telepass", event.getName());
+        log.info("🎨 Template: payment-confirmation.html");
+        log.info("===========================================");
+    }
 }

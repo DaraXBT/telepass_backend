@@ -86,9 +86,7 @@ public class EventServiceImpl implements EventService {
             // Continue with empty set
         }          return EventResponse.builder()
                 .id(event.getId())
-                .name(event.getName())
-                .description(event.getDescription())
-                .status(event.getStatus())
+                .name(event.getName())                .description(event.getDescription())                .status(event.getStatus())
                 .category(event.getCategory())
                 .capacity(event.getCapacity())
                 .registered(event.getRegistered())
@@ -98,6 +96,9 @@ public class EventServiceImpl implements EventService {
                 .startDateTime(event.getStartDateTime())
                 .endDateTime(event.getEndDateTime())
                 .location(event.getLocation())
+                .ticketPrice(event.getTicketPrice())
+                .currency(event.getCurrency())
+                .paymentRequired(event.getPaymentRequired())
                 .eventRoles(new ArrayList<>()) // Return empty list to avoid circular reference issues
                 .registeredUsers(registeredUserIds)
                 .build();
@@ -112,11 +113,10 @@ public class EventServiceImpl implements EventService {
             // Validate required fields
             if (eventRequest.getName() == null || eventRequest.getName().trim().isEmpty()) {
                 throw new IllegalArgumentException("Event name is required");
-            }              log.debug("Creating event entity from request");
+            }            log.debug("Creating event entity from request");
             // Convert request to entity
             Event event = Event.builder()
-                    .name(eventRequest.getName())
-                    .description(eventRequest.getDescription())
+                    .name(eventRequest.getName())                    .description(eventRequest.getDescription())
                     .status(eventRequest.getStatus())
                     .category(eventRequest.getCategory())
                     .capacity(eventRequest.getCapacity())
@@ -126,6 +126,9 @@ public class EventServiceImpl implements EventService {
                     .startDateTime(eventRequest.getStartDateTime())
                     .endDateTime(eventRequest.getEndDateTime())
                     .location(eventRequest.getLocation())
+                    .ticketPrice(eventRequest.getTicketPrice())
+                    .currency(eventRequest.getCurrency() != null ? eventRequest.getCurrency() : "KHR")
+                    .paymentRequired(eventRequest.getPaymentRequired() != null ? eventRequest.getPaymentRequired() : false)
                     .build();
 
             // Save the event
@@ -185,10 +188,10 @@ public class EventServiceImpl implements EventService {
             Event existingEvent = eventRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Event not found with ID: " + id));
             
-            log.info("Found existing event: '{}' (ID: {})", existingEvent.getName(), existingEvent.getId());
-            log.debug("Current event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}", 
+            log.info("Found existing event: '{}' (ID: {})", existingEvent.getName(), existingEvent.getId());            log.debug("Current event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}, TicketPrice: {}, Currency: {}, PaymentRequired: {}", 
                     existingEvent.getName(), existingEvent.getAdminId(), existingEvent.getStatus(), 
-                    existingEvent.getCategory(), existingEvent.getCapacity());
+                    existingEvent.getCategory(), existingEvent.getCapacity(), existingEvent.getTicketPrice(), 
+                    existingEvent.getCurrency(), existingEvent.getPaymentRequired());
             
             // Log what's being updated
             log.debug("Updating event fields...");
@@ -206,31 +209,69 @@ public class EventServiceImpl implements EventService {
             }
             if (existingEvent.getCapacity() != eventRequest.getCapacity()) {
                 log.debug("Capacity changing from {} to {}", existingEvent.getCapacity(), eventRequest.getCapacity());
-            }
-            if (existingEvent.getRegistered() != eventRequest.getRegistered()) {
+            }            if (existingEvent.getRegistered() != eventRequest.getRegistered()) {
                 log.debug("Registered count changing from {} to {}", existingEvent.getRegistered(), eventRequest.getRegistered());
-            }              // Update event fields
+            }
+            if (!Objects.equals(existingEvent.getTicketPrice(), eventRequest.getTicketPrice())) {
+                log.debug("Ticket price changing from {} to {}", existingEvent.getTicketPrice(), eventRequest.getTicketPrice());
+            }
+            if (!Objects.equals(existingEvent.getCurrency(), eventRequest.getCurrency())) {
+                log.debug("Currency changing from '{}' to '{}'", existingEvent.getCurrency(), eventRequest.getCurrency());
+            }
+            if (!Objects.equals(existingEvent.getPaymentRequired(), eventRequest.getPaymentRequired())) {
+                log.debug("Payment required changing from {} to {}", existingEvent.getPaymentRequired(), eventRequest.getPaymentRequired());
+            }// Update event fields
             existingEvent.setName(eventRequest.getName());
             existingEvent.setDescription(eventRequest.getDescription());
             existingEvent.setStatus(eventRequest.getStatus());
-            existingEvent.setCategory(eventRequest.getCategory());
-            existingEvent.setCapacity(eventRequest.getCapacity());
+            existingEvent.setCategory(eventRequest.getCategory());            existingEvent.setCapacity(eventRequest.getCapacity());
             existingEvent.setRegistered(eventRequest.getRegistered());
             existingEvent.setEventImg(eventRequest.getEventImg());
             existingEvent.setAdminId(eventRequest.getAdminId());
             existingEvent.setStartDateTime(eventRequest.getStartDateTime());
             existingEvent.setEndDateTime(eventRequest.getEndDateTime());
             existingEvent.setLocation(eventRequest.getLocation());
-              log.debug("All fields updated, saving to database...");
+            
+            // Update payment-related fields
+            existingEvent.setTicketPrice(eventRequest.getTicketPrice());
+            existingEvent.setCurrency(eventRequest.getCurrency());
+            existingEvent.setPaymentRequired(eventRequest.getPaymentRequired());              log.debug("All fields updated, saving to database...");
             Event savedEvent = eventRepository.save(existingEvent);
+
+            // VERIFICATION: Re-fetch from database to confirm persistence
+            log.debug("Verifying database persistence...");
+            Event verificationEvent = eventRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Event not found during verification"));
+            
+            log.info("=== DATABASE PERSISTENCE VERIFICATION ===");
+            log.info("Saved ticketPrice: {} | Verified ticketPrice: {}", 
+                    savedEvent.getTicketPrice(), verificationEvent.getTicketPrice());
+            log.info("Saved currency: {} | Verified currency: {}", 
+                    savedEvent.getCurrency(), verificationEvent.getCurrency());
+            log.info("Saved paymentRequired: {} | Verified paymentRequired: {}", 
+                    savedEvent.getPaymentRequired(), verificationEvent.getPaymentRequired());
+            
+            // Check for critical mismatches
+            if (!Objects.equals(savedEvent.getTicketPrice(), verificationEvent.getTicketPrice())) {
+                log.error("CRITICAL: Ticket price mismatch! Saved: {}, Verified: {}", 
+                        savedEvent.getTicketPrice(), verificationEvent.getTicketPrice());
+            }
+            if (!Objects.equals(savedEvent.getCurrency(), verificationEvent.getCurrency())) {
+                log.error("CRITICAL: Currency mismatch! Saved: {}, Verified: {}", 
+                        savedEvent.getCurrency(), verificationEvent.getCurrency());
+            }
+            if (!Objects.equals(savedEvent.getPaymentRequired(), verificationEvent.getPaymentRequired())) {
+                log.error("CRITICAL: Payment required mismatch! Saved: {}, Verified: {}", 
+                        savedEvent.getPaymentRequired(), verificationEvent.getPaymentRequired());
+            }
 
             // Handle event roles update if specified in request
             handleEventRoles(savedEvent.getId(), eventRequest.getEventRoles(), savedEvent, true);
             
-            log.info("Successfully updated event with ID: {}", savedEvent.getId());
-            log.debug("Final event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}", 
+            log.info("Successfully updated event with ID: {}", savedEvent.getId());            log.debug("Final event state - Name: {}, AdminId: {}, Status: {}, Category: {}, Capacity: {}, TicketPrice: {}, Currency: {}, PaymentRequired: {}", 
                     savedEvent.getName(), savedEvent.getAdminId(), savedEvent.getStatus(), 
-                    savedEvent.getCategory(), savedEvent.getCapacity());
+                    savedEvent.getCategory(), savedEvent.getCapacity(), savedEvent.getTicketPrice(), 
+                    savedEvent.getCurrency(), savedEvent.getPaymentRequired());
             
             return savedEvent;
             
@@ -295,19 +336,24 @@ public class EventServiceImpl implements EventService {
         }
     }
 
-    @Override
-    @Transactional
+    @Override    @Transactional
     public String registerUserForEvent(UUID eventId, User user) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Event not found"));
-        event.getRegisteredUsers().add(user);
+        
+        // Ensure user is attached to the current session
+        User managedUser = entityManager.merge(user);
+        
+        // Only add user to event's collection (avoid bidirectional for now)
+        event.getRegisteredUsers().add(managedUser);
+        
         eventRepository.save(event);
 
         try {
             return userRegistrationService.generateQRCode(
                     eventId.toString(),
-                    user.getId().toString(),
-                    user.getRegistrationToken());
+                    managedUser.getId().toString(),
+                    managedUser.getRegistrationToken());
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate QR code", e);
         }

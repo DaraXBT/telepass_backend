@@ -13,12 +13,14 @@ spring:
     open-in-view: false
     properties:
       hibernate:
-        format_sql: false # Mail configuration for OTP - Google SMTP Configuration
+        format_sql: false
+
+  # Mail configuration for OTP - Google SMTP Configuration
   mail:
     host: smtp.gmail.com
     port: 587
     username: daraa.dev@gmail.com
-    password: kybx juvu gcui tdrs # Make sure to use App Password if 2FA is enabled on Gmail
+    password: kybx juvu gcui tdrs
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -36,7 +38,7 @@ spring:
           connectiontimeout: 30000
           timeout: 30000
           writetimeout: 30000
-          localhost: telepass-app # Explicitly set hostname to avoid invalid characters
+          localhost: telepass-app
         debug: false
 
   # Disable actuator endpoints that cause excessive logging
@@ -46,6 +48,7 @@ spring:
     health:
       mail:
         enabled: true
+
   servlet:
     multipart:
       max-file-size: 1000MB
@@ -65,7 +68,7 @@ logging:
     org.telegram.telegrambots: WARN
     com.example.tb.configuration.TelegramBotSessionManager: INFO
     com.example.tb.authentication.service.admin.AdminServiceImpl: INFO
-    com.example.tb.jwt: INFO # Reduce JWT-related logging noise
+    com.example.tb.jwt: INFO
     root: INFO
 
 jwt:
@@ -98,12 +101,9 @@ otp:
     subject: "Your OTP Code"
     template: |
       Dear User,
-        Your One-Time Password (OTP) is: {otp}
-
+      Your One-Time Password (OTP) is: {otp}
       This code will expire in {expiration} minutes.
-
       If you didn't request this code, please ignore this email.
-
       Best regards,
       Telepass Team
 
@@ -111,3 +111,61 @@ otp:
 mail:
   debug:
     mode: false
+
+# Bakong Payment Configuration - Simplified for Practice
+bakong:
+  api:
+    token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjp7ImlkIjoiN2U0YzM4ZTA4MjI2NDk2YyJ9LCJpYXQiOjE3NTAzMTMyODMsImV4cCI6MTc1ODA4OTI4M30.4cls6MsMX70ZCF8E4g0F7nCATdelhYQwwAst4QfYZJE
+    secret-key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjp7ImlkIjoiN2U0YzM4ZTA4MjI2NDk2YyJ9LCJpYXQiOjE3NTAzMTMyODMsImV4cCI6MTc1ODA4OTI4M30.4cls6MsMX70ZCF8E4g0F7nCATdelhYQwwAst4QfYZJE
+    base-url: https://api-bakong.nbc.gov.kh
+    transaction-check-url: https://api-bakong.nbc.gov.kh/v1/check_transaction_by_md5
+    version: v1
+    merchant-id: dara_veasna@aclb
+    callback-url: http://localhost:8080/api/v1/payments/bakong/callback
+    return-url: http://localhost:3000/payment/result
+    sandbox: true
+    mock-mode: false
+    timeout: 30000
+    retry:
+      max-attempts: 3
+      delay: 1000
+    signature:
+      algorithm: SHA256withRSA
+      charset: UTF-8
+    webhook:
+      verify-signature: false
+      timeout: 10000
+      ip-whitelist:
+        - "127.0.0.1"
+        - "::1"
+        - "0.0.0.0/0"
+
+  merchant:
+    id: dara_veasna@aclb
+    name: VEASNA Dara
+    city: Phnom Penh
+    phone: 011386747
+    acquiring-bank: ACLB
+    category-code: "5999"
+
+  qr:
+    size: 300
+    format: PNG
+    error-correction: M
+    enable-khmer-language: false
+
+  payment:
+    currency: KHR
+    min-amount: 1000
+    max-amount: 50000000
+    expiry-minutes: 30
+    auto-confirm-timeout: 60
+    notification:
+      enabled: true
+      success-template: "payment-success"
+      failure-template: "payment-failed"
+
+  monitoring:
+    metrics-enabled: true
+    audit-log-enabled: false
+    transaction-log-retention-days: 7

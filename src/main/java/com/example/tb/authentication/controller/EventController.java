@@ -64,11 +64,9 @@ public class EventController {
             log.info("Attempting to create event with name: {}", eventRequest.getName());
             log.debug("Event request details: {}", eventRequest);
             
-            Event createdEvent = eventService.createEvent(eventRequest);
-              // Convert to EventResponse to avoid serialization issues
+            Event createdEvent = eventService.createEvent(eventRequest);              // Convert to EventResponse to avoid serialization issues
             EventResponse eventResponse = EventResponse.builder()
-                    .id(createdEvent.getId())
-                    .name(createdEvent.getName())
+                    .id(createdEvent.getId())                    .name(createdEvent.getName())
                     .description(createdEvent.getDescription())
                     .status(createdEvent.getStatus())
                     .category(createdEvent.getCategory())
@@ -80,6 +78,9 @@ public class EventController {
                     .startDateTime(createdEvent.getStartDateTime())
                     .endDateTime(createdEvent.getEndDateTime())
                     .location(createdEvent.getLocation())
+                    .ticketPrice(createdEvent.getTicketPrice())
+                    .currency(createdEvent.getCurrency())
+                    .paymentRequired(createdEvent.getPaymentRequired())
                     .eventRoles(new ArrayList<>()) // Empty list to avoid circular reference
                     .registeredUsers(new HashSet<>()) // Empty set to avoid lazy loading issues
                     .build();
@@ -97,19 +98,31 @@ public class EventController {
     }    @PutMapping("/{id}")
     public ResponseEntity<EventResponse> updateEvent(@PathVariable UUID id, @RequestBody EventRequest eventRequest) {
         try {
-            log.info("Attempting to update event with ID: {}", id);
-            log.debug("Update request details: {}", eventRequest);
-            log.debug("Request fields - Name: {}, AdminId: {}, Status: {}, Category: {}", 
-                    eventRequest.getName(), eventRequest.getAdminId(), 
-                    eventRequest.getStatus(), eventRequest.getCategory());
+            log.info("=== EVENT UPDATE REQUEST RECEIVED ===");
+            log.info("Event ID: {}", id);
+            log.info("Request ticketPrice: {}", eventRequest.getTicketPrice());
+            log.info("Request currency: {}", eventRequest.getCurrency());
+            log.info("Request paymentRequired: {}", eventRequest.getPaymentRequired());
+            log.info("Request name: {}", eventRequest.getName());
+            log.info("Request adminId: {}", eventRequest.getAdminId());
+            log.debug("Full request object: {}", eventRequest);
             
             EventResponse eventResponse = eventService.updateEventAndReturnResponse(id, eventRequest);
             
+            log.info("=== EVENT UPDATE RESPONSE ===");
+            log.info("Response ticketPrice: {}", eventResponse.getTicketPrice());
+            log.info("Response currency: {}", eventResponse.getCurrency());
+            log.info("Response paymentRequired: {}", eventResponse.getPaymentRequired());
+            log.info("Response name: {}", eventResponse.getName());
             log.info("Successfully updated event with ID: {}", id);
-            log.debug("Updated event details - Name: {}, AdminId: {}, Status: {}", 
-                    eventResponse.getName(), eventResponse.getAdminId(), eventResponse.getStatus());
             
-            return ResponseEntity.ok(eventResponse);
+            // Add debugging headers for frontend troubleshooting
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("X-Updated-Price", eventResponse.getTicketPrice() != null ? eventResponse.getTicketPrice().toString() : "null");
+            headers.add("X-Updated-Currency", eventResponse.getCurrency() != null ? eventResponse.getCurrency() : "null");
+            headers.add("X-Updated-Payment-Required", eventResponse.getPaymentRequired() != null ? eventResponse.getPaymentRequired().toString() : "null");
+            
+            return ResponseEntity.ok().headers(headers).body(eventResponse);
             
         } catch (RuntimeException e) {
             log.error("Failed to update event with ID {}: {}", id, e.getMessage());
@@ -189,15 +202,13 @@ public class EventController {
             if (eventOpt.isEmpty()) {
                 log.warn("Event not found for debug with ID: {}", id);
                 return ResponseEntity.notFound().build();
-            }
-              EventResponse event = eventOpt.get();
+            }              EventResponse event = eventOpt.get();
             Map<String, Object> debugInfo = new HashMap<>();
             debugInfo.put("eventId", event.getId());
             debugInfo.put("name", event.getName());
             debugInfo.put("description", event.getDescription());
             debugInfo.put("status", event.getStatus());
-            debugInfo.put("category", event.getCategory());
-            debugInfo.put("capacity", event.getCapacity());
+            debugInfo.put("category", event.getCategory());            debugInfo.put("capacity", event.getCapacity());
             debugInfo.put("registered", event.getRegistered());
             debugInfo.put("adminId", event.getAdminId());
             debugInfo.put("eventImg", event.getEventImg());
@@ -205,6 +216,9 @@ public class EventController {
             debugInfo.put("startDateTime", event.getStartDateTime());
             debugInfo.put("endDateTime", event.getEndDateTime());
             debugInfo.put("location", event.getLocation());
+            debugInfo.put("ticketPrice", event.getTicketPrice());
+            debugInfo.put("currency", event.getCurrency());
+            debugInfo.put("paymentRequired", event.getPaymentRequired());
             
             log.info("Debug info retrieved for event: {}", event.getName());
             return ResponseEntity.ok(debugInfo);
@@ -215,6 +229,92 @@ public class EventController {
             errorInfo.put("error", e.getMessage());
             errorInfo.put("eventId", id);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorInfo);
+        }
+    }
+    // Specialized debugging endpoint for price update testing
+    @PostMapping("/debug-price-update/{id}")
+    public ResponseEntity<Map<String, Object>> debugPriceUpdate(@PathVariable UUID id, @RequestBody Map<String, Object> updateData) {
+        try {
+            log.info("=== DEBUG PRICE UPDATE TEST ===");
+            log.info("Event ID: {}", id);
+            log.info("Update data received: {}", updateData);
+            
+            // Get current event state
+            Optional<EventResponse> currentEventOpt = eventService.getEventById(id);
+            if (currentEventOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            EventResponse currentEvent = currentEventOpt.get();
+            log.info("Current event state - ticketPrice: {}, currency: {}, paymentRequired: {}", 
+                    currentEvent.getTicketPrice(), currentEvent.getCurrency(), currentEvent.getPaymentRequired());
+            
+            // Create update request
+            EventRequest updateRequest = EventRequest.builder()
+                    .id(currentEvent.getId())
+                    .name(currentEvent.getName())
+                    .description(currentEvent.getDescription())
+                    .status(currentEvent.getStatus())
+                    .category(currentEvent.getCategory())
+                    .capacity(currentEvent.getCapacity())
+                    .registered(currentEvent.getRegistered())
+                    .eventImg(currentEvent.getEventImg())
+                    .adminId(currentEvent.getAdminId())
+                    .startDateTime(currentEvent.getStartDateTime())
+                    .endDateTime(currentEvent.getEndDateTime())
+                    .location(currentEvent.getLocation())
+                    .ticketPrice(updateData.containsKey("ticketPrice") ? 
+                            new java.math.BigDecimal(updateData.get("ticketPrice").toString()) : currentEvent.getTicketPrice())
+                    .currency(updateData.containsKey("currency") ? 
+                            updateData.get("currency").toString() : currentEvent.getCurrency())
+                    .paymentRequired(updateData.containsKey("paymentRequired") ? 
+                            Boolean.valueOf(updateData.get("paymentRequired").toString()) : currentEvent.getPaymentRequired())
+                    .build();
+            
+            log.info("Built update request - ticketPrice: {}, currency: {}, paymentRequired: {}", 
+                    updateRequest.getTicketPrice(), updateRequest.getCurrency(), updateRequest.getPaymentRequired());
+            
+            // Perform update
+            EventResponse updatedEvent = eventService.updateEventAndReturnResponse(id, updateRequest);
+            
+            // Get fresh event state after update
+            Optional<EventResponse> freshEventOpt = eventService.getEventById(id);
+            EventResponse freshEvent = freshEventOpt.orElse(null);
+            
+            Map<String, Object> debugResult = new HashMap<>();
+            debugResult.put("success", true);
+            debugResult.put("eventId", id);
+            debugResult.put("inputData", updateData);
+            debugResult.put("beforeUpdate", Map.of(
+                "ticketPrice", currentEvent.getTicketPrice(),
+                "currency", currentEvent.getCurrency(),
+                "paymentRequired", currentEvent.getPaymentRequired()
+            ));
+            debugResult.put("updateResponse", Map.of(
+                "ticketPrice", updatedEvent.getTicketPrice(),
+                "currency", updatedEvent.getCurrency(),
+                "paymentRequired", updatedEvent.getPaymentRequired()
+            ));
+            debugResult.put("afterRefresh", freshEvent != null ? Map.of(
+                "ticketPrice", freshEvent.getTicketPrice(),
+                "currency", freshEvent.getCurrency(),
+                "paymentRequired", freshEvent.getPaymentRequired()
+            ) : null);
+            debugResult.put("persistenceValid", freshEvent != null && 
+                Objects.equals(updatedEvent.getTicketPrice(), freshEvent.getTicketPrice()) &&
+                Objects.equals(updatedEvent.getCurrency(), freshEvent.getCurrency()) &&
+                Objects.equals(updatedEvent.getPaymentRequired(), freshEvent.getPaymentRequired())
+            );
+            
+            return ResponseEntity.ok(debugResult);
+            
+        } catch (Exception e) {
+            log.error("Debug price update failed for event {}: {}", id, e.getMessage(), e);
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("success", false);
+            errorResult.put("error", e.getMessage());
+            errorResult.put("eventId", id);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResult);
         }
     }
 }

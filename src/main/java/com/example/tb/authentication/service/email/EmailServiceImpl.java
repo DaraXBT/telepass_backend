@@ -2,6 +2,7 @@ package com.example.tb.authentication.service.email;
 
 import com.example.tb.configuration.OtpConfig;
 import com.example.tb.model.response.EventResponse;
+import com.example.tb.model.response.PaymentResponse;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -401,6 +402,43 @@ public class EmailServiceImpl implements EmailService {
             log.info("Check-in confirmation email sent successfully to: {}", email);
         } catch (Exception e) {
             log.error("Failed to send check-in confirmation email to: {}", email, e);
+            throw e;
+        }
+    }
+
+    @Override
+    public void sendPaymentConfirmationEmail(String email, PaymentResponse payment, EventResponse event) throws MessagingException, UnsupportedEncodingException {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            
+            helper.setFrom(fromAddress, fromName);
+            helper.setTo(email);
+            helper.setSubject("Payment Confirmation - " + event.getName() + " - Telepass");
+            
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("customerName", payment.getPayerName());
+            context.setVariable("transactionId", payment.getMerchantTransactionId());
+            context.setVariable("eventName", event.getName());
+            context.setVariable("amount", payment.getAmount().toPlainString());
+            context.setVariable("currency", payment.getCurrency());
+            context.setVariable("paidAt", payment.getPaidAt());
+            context.setVariable("eventDateTime", event.getStartDateTime() != null ? 
+                event.getStartDateTime().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, MMMM dd, yyyy 'at' HH:mm")) : "TBA");
+            context.setVariable("eventLocation", event.getLocation() != null ? event.getLocation() : "TBA");
+            context.setVariable("eventDescription", event.getDescription() != null ? event.getDescription() : "");
+            
+            // Process the template
+            String htmlContent = templateEngine.process("payment-confirmation", context);
+            
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            
+            log.info("Payment confirmation email sent successfully to: {}", email);
+            
+        } catch (Exception e) {
+            log.error("Failed to send payment confirmation email to: {}", email, e);
             throw e;
         }
     }

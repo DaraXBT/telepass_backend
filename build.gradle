@@ -19,6 +19,33 @@ configurations {
 
 repositories {
     mavenCentral()
+    
+    // Official NBC Repository for Bakong KHQR SDK
+    maven {
+        name "NBCMavenRepository"
+        url "https://maven.bakong.nbc.gov.kh/repository/public"
+        allowInsecureProtocol = false
+        credentials {
+            username = project.findProperty("nbc.maven.username") ?: System.getenv("NBC_MAVEN_USERNAME") ?: ""
+            password = project.findProperty("nbc.maven.password") ?: System.getenv("NBC_MAVEN_PASSWORD") ?: ""
+        }
+        authentication {
+            basic(BasicAuthentication)
+        }
+    }
+    
+    // Alternative repositories for external dependencies
+    maven { 
+        name "JitPack"
+        url "https://jitpack.io" 
+    }
+    maven { 
+        name "SonatypeSnapshots"
+        url "https://oss.sonatype.org/content/repositories/snapshots/" 
+    }
+    
+    // Gradle Plugin Portal (for plugins)
+    gradlePluginPortal()
 }
 
 sourceSets {
@@ -33,38 +60,74 @@ sourceSets {
 }
 
 dependencies {
-
-    // Telegram libraries
-    implementation 'org.telegram:telegrambots-spring-boot-starter:6.9.7.0'
-
-    implementation 'javax.xml.bind:jaxb-api:2.3.1'
-    implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.3'
-
+    // Spring Boot Core Starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator:3.1.4'
-    implementation 'io.jsonwebtoken:jjwt:0.9.1'
-    implementation 'org.apache.poi:poi:5.0.0'
-    implementation 'org.apache.poi:poi-ooxml:5.0.0'
-
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'javax.xml.bind:jaxb-api:2.3.1'
-    implementation 'javax.servlet:javax.servlet-api:4.0.1'
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf:3.1.2'
     implementation 'org.springframework.boot:spring-boot-starter-mail:3.1.1'
-    implementation 'com.google.zxing:core:3.5.2'
-    implementation 'com.google.zxing:javase:3.5.2'
+    
+    // Spring Framework Additional
+    implementation 'org.springframework.retry:spring-retry:2.0.1'
+    implementation 'org.springframework:spring-aspects:6.0.10'
+    
+    // Database & ORM
     implementation 'org.postgresql:postgresql'
+    implementation 'org.hibernate:hibernate-core:6.4.4.Final'    // Telegram Bot Integration
+    implementation 'org.telegram:telegrambots-spring-boot-starter:6.9.7.0'
+      // Official Bakong KHQR Payment Integration SDK
+    // NOTE: SDK not yet available in public repositories - using local stub implementation
+    // 
+    // WHEN OFFICIAL SDK BECOMES AVAILABLE:
+    // 1. Download SDK from NBC or request access to NBC Maven repository
+    // 2. Either install manually to local Maven repository or get repository credentials
+    // 3. Uncomment the dependency below and remove local stub classes
+    // 
+    // For manual installation:
+    // mvn install:install-file -Dfile=path/to/sdk-java-2.0.0.jar \
+    //   -DgroupId=kh.gov.nbc.bakong_khqr -DartifactId=sdk-java -Dversion=2.0.0 -Dpackaging=jar
+    //
+    // implementation('kh.gov.nbc.bakong_khqr:sdk-java:2.0.0') {
+    //     exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+    //     exclude group: 'log4j', module: 'log4j'
+    // }
+    
+    // Fallback HTTP client for custom Bakong API integration
+    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+    
+    // QR Code Generation (Backup/Fallback)
     implementation 'com.google.zxing:core:3.5.2'
     implementation 'com.google.zxing:javase:3.5.2'
-//    implementation 'org.hibernate:hibernate-core:6.2.13.Final'
-    implementation 'org.hibernate:hibernate-core:6.4.4.Final'
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+    
+    // JSON & Data Processing
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2'
+    
+    // XML Processing
+    implementation 'javax.xml.bind:jaxb-api:2.3.1'
+    implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.3'
+    
+    // Security & Authentication
+    implementation 'io.jsonwebtoken:jjwt:0.9.1'
+    
+    // Office Document Processing
+    implementation 'org.apache.poi:poi:5.0.0'
+    implementation 'org.apache.poi:poi-ooxml:5.0.0'
+    
+    // Servlet API
+    implementation 'javax.servlet:javax.servlet-api:4.0.1'
+    
+    // API Documentation
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0'
+    
+    // Development Tools
     compileOnly 'org.projectlombok:lombok'
-//    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'
+//    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    
+    // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
